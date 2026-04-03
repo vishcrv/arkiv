@@ -289,6 +289,75 @@ def cmd_list_sold(args):
         print(f"[{isbn}] {b['title']}  |  {s['buyer']}  |  ${s['price']}  |  {s['date']}")
 
 
+# --- search & filter commands ---
+
+def _format_book_row(isbn, book, authors):
+    author = authors.get(book["author_id"])
+    author_name = author["name"] if author else book["author_id"]
+    return f"[{isbn}] {book['title']} — {author_name} ({book['year']}, {book['genre']}) [{book['status']}]"
+
+
+def cmd_find_isbn(args):
+    db = store.load()
+    book = store.get_book(db, args.isbn)
+    if book is None:
+        print(f"No book with ISBN '{args.isbn}'.", file=sys.stderr)
+        sys.exit(1)
+    print(_format_book_row(args.isbn, book, db["authors"]))
+
+
+def cmd_find_author(args):
+    db = store.load()
+    author_id, author = find_author_by_name(db, args.name)
+    if author is None:
+        print(f"Author '{args.name}' not found.", file=sys.stderr)
+        sys.exit(1)
+    books = [(isbn, b) for isbn, b in db["books"].items() if b["author_id"] == author_id]
+    if not books:
+        print(f"No books found for '{args.name}'.")
+        return
+    for isbn, b in sorted(books, key=lambda x: x[1]["year"]):
+        print(_format_book_row(isbn, b, db["authors"]))
+
+
+def cmd_filter_books(args):
+    db = store.load()
+    results = list(db["books"].items())
+
+    if args.genre:
+        genre_lower = args.genre.lower()
+        results = [(isbn, b) for isbn, b in results if b["genre"].lower() == genre_lower]
+    if args.status:
+        results = [(isbn, b) for isbn, b in results if b["status"] == args.status]
+    if args.after:
+        results = [(isbn, b) for isbn, b in results if b["year"] > args.after]
+    if args.before:
+        results = [(isbn, b) for isbn, b in results if b["year"] < args.before]
+
+    if not results:
+        print("No books match the given filters.")
+        return
+    for isbn, b in sorted(results, key=lambda x: x[1]["year"]):
+        print(_format_book_row(isbn, b, db["authors"]))
+
+
+def cmd_list_books(args):
+    db = store.load()
+    books = list(db["books"].items())
+    if not books:
+        print("No books.")
+        return
+
+    sort_key = {
+        "title":  lambda x: x[1]["title"].lower(),
+        "year":   lambda x: x[1]["year"],
+        "author": lambda x: (db["authors"].get(x[1]["author_id"], {}).get("name", "") or "").lower(),
+    }[args.sort]
+
+    for isbn, b in sorted(books, key=sort_key):
+        print(_format_book_row(isbn, b, db["authors"]))
+
+
 # --- parser ---
 
 def build_parser() -> argparse.ArgumentParser:
@@ -395,6 +464,29 @@ def build_parser() -> argparse.ArgumentParser:
     # list-sold
     ls = sub.add_parser("list-sold", help="show all sold books")
     ls.set_defaults(func=cmd_list_sold)
+
+    # find-isbn
+    fi = sub.add_parser("find-isbn", help="look up a book by ISBN")
+    fi.add_argument("isbn")
+    fi.set_defaults(func=cmd_find_isbn)
+
+    # find-author
+    fa = sub.add_parser("find-author", help="list all books by an author")
+    fa.add_argument("name")
+    fa.set_defaults(func=cmd_find_author)
+
+    # filter-books
+    fb = sub.add_parser("filter-books", help="filter books by genre, year range, or status")
+    fb.add_argument("--genre")
+    fb.add_argument("--status", choices=["available", "lent", "sold"])
+    fb.add_argument("--after", type=int, metavar="YEAR")
+    fb.add_argument("--before", type=int, metavar="YEAR")
+    fb.set_defaults(func=cmd_filter_books)
+
+    # list-books
+    lb2 = sub.add_parser("list-books", help="list all books with optional sort")
+    lb2.add_argument("--sort", choices=["title", "year", "author"], default="title")
+    lb2.set_defaults(func=cmd_list_books)
 
     return p
 
