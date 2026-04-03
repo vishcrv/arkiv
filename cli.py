@@ -32,14 +32,6 @@ def ask_int(prompt, required=True):
             print("  (must be a whole number)")
 
 
-def ask_float(prompt):
-    while True:
-        val = input(f"  {prompt}: ").strip()
-        try:
-            return float(val)
-        except ValueError:
-            print("  (must be a number, e.g. 12.99)")
-
 
 def pause():
     input("\n  Press Enter to continue...")
@@ -205,7 +197,7 @@ def do_add_book():
     store.put_book(db, isbn, {
         "title": title, "author_id": author_id, "pages": pages,
         "year": year, "genre": genre, "publisher": publisher,
-        "status": "available", "lending": None, "sale": None,
+        "status": "available", "lending": None,
     })
     store.save(db)
     ok(f"Added '{title}' ({isbn})")
@@ -232,11 +224,6 @@ def do_view_book():
     if book["status"] == "lent" and book["lending"]:
         l = book["lending"]
         print(f"  Borrower:  {l['borrower']}  |  Due: {l['due_date']}")
-    if book["status"] == "sold" and book["sale"]:
-        s = book["sale"]
-        print(f"  Buyer:     {s['buyer']}  |  ${s['price']}  |  {s['date']}")
-
-
 def do_update_book():
     section("Update Book")
     isbn = ask("ISBN of book to update")
@@ -357,41 +344,6 @@ def do_overdue():
         print(f"  [{isbn}] {b['title']}  |  {l['borrower']}  |  due {l['due_date']}  *** OVERDUE ***")
 
 
-# --- sale actions ---
-
-def do_sell_book():
-    section("Sell a Book")
-    isbn = ask("ISBN")
-    db = store.load()
-    book = store.get_book(db, isbn)
-    if book is None:
-        err(f"No book with ISBN '{isbn}'.")
-        return
-    if book["status"] != "available":
-        err(f"Cannot sell — status is '{book['status']}'.")
-        return
-    buyer = ask("Buyer name")
-    price = ask_float("Sale price")
-    sale_date = ask("Sale date (YYYY-MM-DD)", )
-    book["status"] = "sold"
-    book["sale"] = {"buyer": buyer, "price": price, "date": sale_date}
-    store.put_book(db, isbn, book)
-    store.save(db)
-    ok(f"Sold '{book['title']}' to {buyer} for ${price}.")
-
-
-def do_list_sold():
-    db = store.load()
-    sold = [(isbn, b) for isbn, b in db["books"].items() if b["status"] == "sold"]
-    section("Sold Books")
-    if not sold:
-        print("  (none)")
-        return
-    for isbn, b in sorted(sold, key=lambda x: x[1]["sale"]["date"], reverse=True):
-        s = b["sale"]
-        print(f"  [{isbn}] {b['title']}  |  {s['buyer']}  |  ${s['price']}  |  {s['date']}")
-
-
 # --- search actions ---
 
 def do_find_isbn():
@@ -426,7 +378,7 @@ def do_filter_books():
     section("Filter Books")
     print("  (leave blank to skip a filter)")
     genre = ask("Genre", required=False)
-    status = ask("Status (available / lent / sold)", required=False)
+    status = ask("Status (available / lent)", required=False)
     after = ask_int("Published after year", required=False)
     before = ask_int("Published before year", required=False)
 
@@ -434,7 +386,7 @@ def do_filter_books():
     results = list(db["books"].items())
     if genre:
         results = [(i, b) for i, b in results if b["genre"].lower() == genre.lower()]
-    if status:
+    if status and status in ("available", "lent"):
         results = [(i, b) for i, b in results if b["status"] == status]
     if after is not None:
         results = [(i, b) for i, b in results if b["year"] > after]
@@ -453,25 +405,20 @@ def do_filter_books():
 def do_stats():
     db = store.load()
     books = db["books"]
-    status_counts = {"available": 0, "lent": 0, "sold": 0}
+    status_counts = {"available": 0, "lent": 0}
     genre_counts = {}
-    sales_total = 0.0
     for b in books.values():
         status_counts[b["status"]] = status_counts.get(b["status"], 0) + 1
         genre_counts[b["genre"]] = genre_counts.get(b["genre"], 0) + 1
-        if b["status"] == "sold" and b["sale"]:
-            sales_total += b["sale"]["price"]
 
     section("Collection Stats")
     print(f"  Authors        : {len(db['authors'])}")
     print(f"  Total books    : {len(books)}")
     print(f"    available    : {status_counts['available']}")
     print(f"    lent         : {status_counts['lent']}")
-    print(f"    sold         : {status_counts['sold']}")
     print(f"\n  By genre:")
     for genre, count in sorted(genre_counts.items(), key=lambda x: -x[1]):
         print(f"    {genre:<20} {count}")
-    print(f"\n  Total sales value: ${sales_total:.2f}")
 
 
 # --- internal helper ---
@@ -509,10 +456,6 @@ MENU = [
         ("List lent books",    do_list_lent),
         ("Overdue books",      do_overdue),
     ]),
-    ("SALES", [
-        ("Sell a book",        do_sell_book),
-        ("List sold books",    do_list_sold),
-    ]),
     ("SEARCH", [
         ("Find by ISBN",       do_find_isbn),
         ("Find by author",     do_find_author),
@@ -526,17 +469,48 @@ MENU = [
 
 def print_menu(items):
     clear()
-    print("\n  ╔══════════════════════════════════════╗")
-    print("  ║        ARKIV  Book Collection        ║")
-    print("  ╚══════════════════════════════════════╝\n")
+    print("\n  ╔══════════════════════════════════════════════════════════╗")
+    print("  ║               ARKIV  —  Book Collection                  ║")
+    print("  ╚══════════════════════════════════════════════════════════╝\n")
+
+    # assign numbers first
+    numbered = []
     n = 1
     for group, actions in items:
-        print(f"  {group}")
-        for label, _ in actions:
-            print(f"   {n:2}.  {label}")
+        group_items = []
+        for label, fn in actions:
+            group_items.append((n, label, fn))
             n += 1
+        numbered.append((group, group_items))
+
+    # render pairs of groups side by side
+    COL = 32
+    pairs = [(numbered[i], numbered[i + 1] if i + 1 < len(numbered) else None)
+             for i in range(0, len(numbered), 2)]
+
+    for left, right in pairs:
+        l_group, l_items = left
+        r_group, r_items = right if right else ("", [])
+
+        l_head = f"  {l_group}"
+        r_head = f"  {r_group}" if r_group else ""
+        print(f"{l_head:<{COL + 2}}  {r_head}")
+
+        for i in range(max(len(l_items), len(r_items))):
+            if i < len(l_items):
+                num, label, _ = l_items[i]
+                l_cell = f"  {num:2}.  {label}"
+            else:
+                l_cell = ""
+            if i < len(r_items):
+                num, label, _ = r_items[i]
+                r_cell = f"  {num:2}.  {label}"
+            else:
+                r_cell = ""
+            print(f"{l_cell:<{COL + 2}}  {r_cell}")
         print()
-    print("    0.  Exit\n")
+
+    print(f"{'':>{COL // 2}}   0.  Exit\n")
 
 
 def run():

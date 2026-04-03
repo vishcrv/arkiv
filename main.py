@@ -143,7 +143,6 @@ def cmd_add_book(args):
         "publisher": args.publisher,
         "status": "available",
         "lending": None,
-        "sale": None,
     })
     store.save(db)
     print(f"Added '{args.title}' ({args.isbn})")
@@ -178,11 +177,6 @@ def cmd_view_book(args):
     if book["status"] == "lent" and book["lending"]:
         l = book["lending"]
         print(f"  Borrower: {l['borrower']}  |  Due: {l['due_date']}")
-    if book["status"] == "sold" and book["sale"]:
-        s = book["sale"]
-        print(f"  Buyer: {s['buyer']}  |  Price: ${s['price']}  |  Date: {s['date']}")
-
-
 def cmd_update_book(args):
     db = store.load()
     book = get_book_or_exit(db, args.isbn)
@@ -263,32 +257,6 @@ def cmd_overdue(args):
         print(f"[{isbn}] {b['title']}  |  {l['borrower']}  |  due {l['due_date']}  OVERDUE")
 
 
-# --- sale commands ---
-
-def cmd_sell_book(args):
-    db = store.load()
-    book = get_book_or_exit(db, args.isbn)
-    if book["status"] != "available":
-        print(f"Cannot sell: book is '{book['status']}'.", file=sys.stderr)
-        sys.exit(1)
-    book["status"] = "sold"
-    book["sale"] = {"buyer": args.buyer, "price": args.price, "date": args.date}
-    store.put_book(db, args.isbn, book)
-    store.save(db)
-    print(f"Sold '{book['title']}' to {args.buyer} for ${args.price}.")
-
-
-def cmd_list_sold(args):
-    db = store.load()
-    sold = [(isbn, b) for isbn, b in db["books"].items() if b["status"] == "sold"]
-    if not sold:
-        print("No books sold.")
-        return
-    for isbn, b in sorted(sold, key=lambda x: x[1]["sale"]["date"], reverse=True):
-        s = b["sale"]
-        print(f"[{isbn}] {b['title']}  |  {s['buyer']}  |  ${s['price']}  |  {s['date']}")
-
-
 # --- utility commands ---
 
 def cmd_stats(args):
@@ -299,25 +267,19 @@ def cmd_stats(args):
     total_books = len(books)
     total_authors = len(authors)
 
-    status_counts = {"available": 0, "lent": 0, "sold": 0}
+    status_counts = {"available": 0, "lent": 0}
     genre_counts = {}
-    sales_total = 0.0
 
     for b in books.values():
         status_counts[b["status"]] = status_counts.get(b["status"], 0) + 1
         genre_counts[b["genre"]] = genre_counts.get(b["genre"], 0) + 1
-        if b["status"] == "sold" and b["sale"]:
-            sales_total += b["sale"]["price"]
-
     print(f"Authors : {total_authors}")
     print(f"Books   : {total_books}")
     print(f"  available : {status_counts['available']}")
     print(f"  lent      : {status_counts['lent']}")
-    print(f"  sold      : {status_counts['sold']}")
     print(f"\nBy genre:")
     for genre, count in sorted(genre_counts.items(), key=lambda x: -x[1]):
         print(f"  {genre:<20} {count}")
-    print(f"\nTotal sales value: ${sales_total:.2f}")
 
 
 def cmd_help(args):
@@ -343,10 +305,6 @@ arkiv — book collection manager
     return-book     <isbn>
     list-lent
     overdue
-
-  SALES
-    sell-book       <isbn> --buyer --price --date
-    list-sold
 
   SEARCH
     find-isbn       <isbn>
@@ -524,18 +482,6 @@ def build_parser() -> argparse.ArgumentParser:
     od = sub.add_parser("overdue", help="show lent books past their due date")
     od.set_defaults(func=cmd_overdue)
 
-    # sell-book
-    sb = sub.add_parser("sell-book", help="mark a book as sold")
-    sb.add_argument("isbn")
-    sb.add_argument("--buyer", required=True)
-    sb.add_argument("--price", required=True, type=float)
-    sb.add_argument("--date", required=True, help="YYYY-MM-DD")
-    sb.set_defaults(func=cmd_sell_book)
-
-    # list-sold
-    ls = sub.add_parser("list-sold", help="show all sold books")
-    ls.set_defaults(func=cmd_list_sold)
-
     # stats
     st = sub.add_parser("stats", help="collection statistics")
     st.set_defaults(func=cmd_stats)
@@ -557,7 +503,7 @@ def build_parser() -> argparse.ArgumentParser:
     # filter-books
     fb = sub.add_parser("filter-books", help="filter books by genre, year range, or status")
     fb.add_argument("--genre")
-    fb.add_argument("--status", choices=["available", "lent", "sold"])
+    fb.add_argument("--status", choices=["available", "lent"])
     fb.add_argument("--after", type=int, metavar="YEAR")
     fb.add_argument("--before", type=int, metavar="YEAR")
     fb.set_defaults(func=cmd_filter_books)

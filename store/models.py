@@ -7,12 +7,6 @@ class Lending(TypedDict):
     due_date: str  # ISO 8601
 
 
-class Sale(TypedDict):
-    buyer: str
-    price: float
-    date: str  # ISO 8601
-
-
 class Author(TypedDict):
     name: str
     country: str
@@ -27,9 +21,8 @@ class Book(TypedDict):
     year: int
     genre: str
     publisher: str
-    status: str     # available | lent | sold
+    status: str     # available | lent
     lending: Optional[Lending]
-    sale: Optional[Sale]
 
 
 class Store(TypedDict):

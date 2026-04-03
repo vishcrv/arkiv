@@ -1,4 +1,4 @@
-from .models import Author, Book, Lending, Sale, Store
+from .models import Author, Book, Lending, Store
 from .db import (
     load, save,
     new_author_id,
