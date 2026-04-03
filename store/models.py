@@ -23,8 +23,10 @@ class Author(TypedDict):
 class Book(TypedDict):
     title: str
     author_id: str  # uuid → authors key
-    genre: str
+    pages: int
     year: int
+    genre: str
+    publisher: str
     status: str     # available | lent | sold
     lending: Optional[Lending]
     sale: Optional[Sale]
