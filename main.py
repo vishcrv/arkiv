@@ -289,6 +289,77 @@ def cmd_list_sold(args):
         print(f"[{isbn}] {b['title']}  |  {s['buyer']}  |  ${s['price']}  |  {s['date']}")
 
 
+# --- utility commands ---
+
+def cmd_stats(args):
+    db = store.load()
+    books = db["books"]
+    authors = db["authors"]
+
+    total_books = len(books)
+    total_authors = len(authors)
+
+    status_counts = {"available": 0, "lent": 0, "sold": 0}
+    genre_counts = {}
+    sales_total = 0.0
+
+    for b in books.values():
+        status_counts[b["status"]] = status_counts.get(b["status"], 0) + 1
+        genre_counts[b["genre"]] = genre_counts.get(b["genre"], 0) + 1
+        if b["status"] == "sold" and b["sale"]:
+            sales_total += b["sale"]["price"]
+
+    print(f"Authors : {total_authors}")
+    print(f"Books   : {total_books}")
+    print(f"  available : {status_counts['available']}")
+    print(f"  lent      : {status_counts['lent']}")
+    print(f"  sold      : {status_counts['sold']}")
+    print(f"\nBy genre:")
+    for genre, count in sorted(genre_counts.items(), key=lambda x: -x[1]):
+        print(f"  {genre:<20} {count}")
+    print(f"\nTotal sales value: ${sales_total:.2f}")
+
+
+def cmd_help(args):
+    help_text = """
+arkiv — book collection manager
+
+  AUTHORS
+    add-author      --name --country --dob [--awards]
+    list-authors
+    view-author     <name>
+    update-author   <name> [--name --country --dob --add-award --remove-award]
+    remove-author   <name>
+
+  BOOKS
+    add-book        --title --isbn --pages --year --genre --publisher --author-id
+    list-books      [--sort title|year|author]
+    view-book       <isbn>
+    update-book     <isbn> [--title --pages --year --genre --publisher --author-id]
+    remove-book     <isbn>
+
+  LENDING
+    lend-book       <isbn> --borrower --due-date
+    return-book     <isbn>
+    list-lent
+    overdue
+
+  SALES
+    sell-book       <isbn> --buyer --price --date
+    list-sold
+
+  SEARCH
+    find-isbn       <isbn>
+    find-author     <name>
+    filter-books    [--genre --status --after --before]
+
+  UTILITY
+    stats
+    dump            [all|authors|books]
+"""
+    print(help_text.strip())
+
+
 # --- search & filter commands ---
 
 def _format_book_row(isbn, book, authors):
@@ -464,6 +535,14 @@ def build_parser() -> argparse.ArgumentParser:
     # list-sold
     ls = sub.add_parser("list-sold", help="show all sold books")
     ls.set_defaults(func=cmd_list_sold)
+
+    # stats
+    st = sub.add_parser("stats", help="collection statistics")
+    st.set_defaults(func=cmd_stats)
+
+    # help
+    hp = sub.add_parser("help", help="list all commands")
+    hp.set_defaults(func=cmd_help)
 
     # find-isbn
     fi = sub.add_parser("find-isbn", help="look up a book by ISBN")
