@@ -1,17 +1,11 @@
-import { BookOpen, Clock, AlertTriangle, Search } from "lucide-react";
+import { BookOpen, AlertTriangle, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 
 // ─── Currently Reading Section ───
 function CurrentlyReading() {
   // TODO: replace with real data
-  const books: {
-    id: number;
-    title: string;
-    author: string;
-    progress: number;
-  }[] = [];
+  const books = [];
 
   if (books.length === 0) {
     return (
@@ -57,7 +51,7 @@ function CurrentlyReading() {
 // ─── Alerts Section ───
 function Alerts() {
   // TODO: replace with real data
-  const overdue: { id: number; title: string; borrower: string; days: number }[] = [];
+  const overdue = [];
 
   if (overdue.length === 0) {
     return (
@@ -139,7 +133,7 @@ function FilterBar() {
 // ─── Library Grid ───
 function LibraryGrid() {
   // TODO: replace with real data
-  const books: { id: number; title: string; author: string }[] = [];
+  const books = [];
 
   if (books.length === 0) {
     return (
@@ -152,7 +146,7 @@ function LibraryGrid() {
           start by searching for your first book
         </p>
         <Link
-          href="/discover"
+          to="/discover"
           className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80"
         >
           <Search className="mr-2 h-4 w-4" />
@@ -167,7 +161,7 @@ function LibraryGrid() {
       {books.map((book) => (
         <Link
           key={book.id}
-          href={`/book/${book.id}`}
+          to={`/book/${book.id}`}
           className="group flex flex-col gap-2"
         >
           <div className="aspect-[2/3] overflow-hidden rounded-lg bg-muted shadow-sm transition-shadow group-hover:shadow-md" />

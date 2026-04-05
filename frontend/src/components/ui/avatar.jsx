@@ -1,17 +1,7 @@
-"use client"
+import { Avatar as AvatarPrimitive } from "@base-ui/react/avatar";
+import { cn } from "@/lib/utils";
 
-import * as React from "react"
-import { Avatar as AvatarPrimitive } from "@base-ui/react/avatar"
-
-import { cn } from "@/lib/utils"
-
-function Avatar({
-  className,
-  size = "default",
-  ...props
-}: AvatarPrimitive.Root.Props & {
-  size?: "default" | "sm" | "lg"
-}) {
+function Avatar({ className, size = "default", ...props }) {
   return (
     <AvatarPrimitive.Root
       data-slot="avatar"
@@ -22,10 +12,10 @@ function Avatar({
       )}
       {...props}
     />
-  )
+  );
 }
 
-function AvatarImage({ className, ...props }: AvatarPrimitive.Image.Props) {
+function AvatarImage({ className, ...props }) {
   return (
     <AvatarPrimitive.Image
       data-slot="avatar-image"
@@ -35,13 +25,10 @@ function AvatarImage({ className, ...props }: AvatarPrimitive.Image.Props) {
       )}
       {...props}
     />
-  )
+  );
 }
 
-function AvatarFallback({
-  className,
-  ...props
-}: AvatarPrimitive.Fallback.Props) {
+function AvatarFallback({ className, ...props }) {
   return (
     <AvatarPrimitive.Fallback
       data-slot="avatar-fallback"
@@ -51,10 +38,10 @@ function AvatarFallback({
       )}
       {...props}
     />
-  )
+  );
 }
 
-function AvatarBadge({ className, ...props }: React.ComponentProps<"span">) {
+function AvatarBadge({ className, ...props }) {
   return (
     <span
       data-slot="avatar-badge"
@@ -67,10 +54,10 @@ function AvatarBadge({ className, ...props }: React.ComponentProps<"span">) {
       )}
       {...props}
     />
-  )
+  );
 }
 
-function AvatarGroup({ className, ...props }: React.ComponentProps<"div">) {
+function AvatarGroup({ className, ...props }) {
   return (
     <div
       data-slot="avatar-group"
@@ -80,13 +67,10 @@ function AvatarGroup({ className, ...props }: React.ComponentProps<"div">) {
       )}
       {...props}
     />
-  )
+  );
 }
 
-function AvatarGroupCount({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+function AvatarGroupCount({ className, ...props }) {
   return (
     <div
       data-slot="avatar-group-count"
@@ -96,7 +80,7 @@ function AvatarGroupCount({
       )}
       {...props}
     />
-  )
+  );
 }
 
 export {
@@ -106,4 +90,4 @@ export {
   AvatarGroup,
   AvatarGroupCount,
   AvatarBadge,
-}
+};

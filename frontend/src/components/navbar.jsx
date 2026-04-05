@@ -1,7 +1,5 @@
-"use client";
-
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "react-router-dom";
 import { Search, BookOpen, X } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Input } from "@/components/ui/input";
@@ -22,7 +20,7 @@ export function Navbar() {
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
         {/* Logo */}
         <Link
-          href="/"
+          to="/"
           className="flex items-center gap-2 text-foreground transition-opacity hover:opacity-80"
         >
           <BookOpen className="h-5 w-5 text-primary" />
@@ -34,13 +32,13 @@ export function Navbar() {
         {/* Center Nav */}
         <div className="flex items-center gap-8">
           <Link
-            href="/"
+            to="/"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             home
           </Link>
           <Link
-            href="/discover"
+            to="/discover"
             className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             discover
@@ -87,7 +85,7 @@ export function Navbar() {
               </Avatar>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
-              <DropdownMenuItem render={<Link href="/profile" />}>
+              <DropdownMenuItem render={<Link to="/profile" />}>
                 profile
               </DropdownMenuItem>
               <DropdownMenuItem>settings</DropdownMenuItem>

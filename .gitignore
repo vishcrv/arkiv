@@ -4,5 +4,5 @@ data.json
 
 # frontend
 node_modules/
-.next/
-.turbo/
+dist/
+.env*.local
