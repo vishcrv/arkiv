@@ -1,7 +1,7 @@
 import argparse
 import json
 import sys
-from datetime import date
+from datetime import date, datetime, timezone
 
 import store
 
@@ -143,7 +143,16 @@ def cmd_add_book(args):
         "publisher": args.publisher,
         "status": "available",
         "lending": None,
+        "description": None,
+        "rating": None,
+        "thoughts": None,
+        "format": "paperback",
+        "date_added": date.today().isoformat(),
+        "date_read": None,
+        "sale_price": None,
+        "sale_date": None,
     })
+    store.log_activity(db, "added", f"Added '{args.title}'", isbn=args.isbn)
     store.save(db)
     print(f"Added '{args.title}' ({args.isbn})")
 
@@ -261,24 +270,19 @@ def cmd_overdue(args):
 
 def cmd_stats(args):
     db = store.load()
-    books = db["books"]
-    authors = db["authors"]
-
-    total_books = len(books)
-    total_authors = len(authors)
-
-    status_counts = {"available": 0, "lent": 0}
-    genre_counts = {}
-
-    for b in books.values():
-        status_counts[b["status"]] = status_counts.get(b["status"], 0) + 1
-        genre_counts[b["genre"]] = genre_counts.get(b["genre"], 0) + 1
-    print(f"Authors : {total_authors}")
-    print(f"Books   : {total_books}")
-    print(f"  available : {status_counts['available']}")
-    print(f"  lent      : {status_counts['lent']}")
+    s = store.compute_stats(db)
+    print(f"Authors         : {s['authors_in_collection']}")
+    print(f"Books owned     : {s['books_owned']}")
+    print(f"  available     : {s['books_available']}")
+    print(f"  reading       : {s['currently_reading']}")
+    print(f"  lent          : {s['books_lent']}")
+    print(f"  sold          : {s['books_sold']}")
+    print(f"Books read      : {s['books_read']}")
+    print(f"Pages read      : {s['pages_read']}")
+    print(f"Reviews logged  : {s['reviews_logged']}")
+    print(f"Wishlist        : {s['wishlist_count']}")
     print(f"\nBy genre:")
-    for genre, count in sorted(genre_counts.items(), key=lambda x: -x[1]):
+    for genre, count in sorted(s["genre_breakdown"].items(), key=lambda x: -x[1]):
         print(f"  {genre:<20} {count}")
 
 
@@ -503,7 +507,7 @@ def build_parser() -> argparse.ArgumentParser:
     # filter-books
     fb = sub.add_parser("filter-books", help="filter books by genre, year range, or status")
     fb.add_argument("--genre")
-    fb.add_argument("--status", choices=["available", "lent"])
+    fb.add_argument("--status", choices=["available", "lent", "reading", "sold"])
     fb.add_argument("--after", type=int, metavar="YEAR")
     fb.add_argument("--before", type=int, metavar="YEAR")
     fb.set_defaults(func=cmd_filter_books)
