@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { BookOpen, AlertTriangle, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
+import { booksApi, wishlistApi } from "@/lib/api";
 
 // ─── Currently Reading ───
 function CurrentlyReading({ books }) {
@@ -31,7 +32,16 @@ function CurrentlyReading({ books }) {
             to={`/book/${book.isbn}`}
             className="flex items-center gap-4 rounded-lg transition-colors hover:bg-muted/50"
           >
-            <div className="h-16 w-11 rounded-md bg-muted" />
+            {book.cover_url ? (
+              <img
+                src={book.cover_url}
+                alt={book.title}
+                className="h-16 w-11 rounded-md object-cover"
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
+              />
+            ) : (
+              <div className="h-16 w-11 rounded-md bg-muted" />
+            )}
             <div className="flex flex-1 flex-col gap-1">
               <span className="text-sm font-medium text-foreground">
                 {book.title}
@@ -170,7 +180,16 @@ function LibraryGrid({ view, books, wishlist }) {
       <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {wishlist.map((item) => (
           <div key={item.isbn} className="flex flex-col gap-2">
-            <div className="aspect-[2/3] overflow-hidden rounded-lg bg-muted shadow-sm" />
+            {item.cover_url ? (
+              <img
+                src={item.cover_url}
+                alt={item.title}
+                className="aspect-[2/3] w-full rounded-lg object-cover shadow-sm"
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
+              />
+            ) : (
+              <div className="aspect-[2/3] overflow-hidden rounded-lg bg-muted shadow-sm" />
+            )}
             <div className="flex flex-col gap-0.5 px-0.5">
               <span className="line-clamp-1 text-sm font-medium text-foreground">
                 {item.title}
@@ -214,7 +233,16 @@ function LibraryGrid({ view, books, wishlist }) {
           to={`/book/${book.isbn}`}
           className="group flex flex-col gap-2"
         >
-          <div className="aspect-[2/3] overflow-hidden rounded-lg bg-muted shadow-sm transition-shadow group-hover:shadow-md" />
+          {book.cover_url ? (
+            <img
+              src={book.cover_url}
+              alt={book.title}
+              className="aspect-[2/3] w-full rounded-lg object-cover shadow-sm transition-shadow group-hover:shadow-md"
+              onError={(e) => { e.currentTarget.style.display = "none"; }}
+            />
+          ) : (
+            <div className="aspect-[2/3] overflow-hidden rounded-lg bg-muted shadow-sm transition-shadow group-hover:shadow-md" />
+          )}
           <div className="flex flex-col gap-0.5 px-0.5">
             <span className="line-clamp-1 text-sm font-medium text-foreground">
               {book.title}
@@ -237,8 +265,8 @@ export default function Home() {
   const [wishlist, setWishlist] = useState([]);
 
   useEffect(() => {
-    fetch("/api/books").then((r) => r.json()).then(setBooks).catch(console.error);
-    fetch("/api/wishlist").then((r) => r.json()).then(setWishlist).catch(console.error);
+    booksApi.list().then(setBooks).catch(console.error);
+    wishlistApi.list().then(setWishlist).catch(console.error);
   }, []);
 
   const readingBooks = books.filter((b) => b.status === "reading");

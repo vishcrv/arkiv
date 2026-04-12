@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Star, BookOpen, User } from "lucide-react";
+import { authorsApi, ApiError } from "@/lib/api";
 
 function OwnedBookRow({ book }) {
   return (
@@ -36,13 +37,12 @@ export default function AuthorDetail() {
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/authors/${id}`)
-      .then((r) => {
-        if (r.status === 404) { setNotFound(true); return null; }
-        return r.json();
-      })
-      .then((data) => { if (data) setAuthor(data); })
-      .catch(console.error);
+    authorsApi.get(id)
+      .then(setAuthor)
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 404) setNotFound(true);
+        else console.error(err);
+      });
   }, [id]);
 
   if (notFound) {

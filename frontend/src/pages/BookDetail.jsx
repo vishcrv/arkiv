@@ -4,6 +4,7 @@ import { Star, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { booksApi, ApiError } from "@/lib/api";
 
 // ─── Star Rating ───
 function StarRating({ rating, onRate }) {
@@ -42,16 +43,12 @@ function CollectionMode({ book, setBook, navigate }) {
   const [dueDate, setDueDate] = useState(book.lending?.due_date || "");
   const [salePrice, setSalePrice] = useState(book.sale_price?.toString() || "");
   const [saleDate, setSaleDate] = useState(book.sale_date || "");
+  const [coverUrl, setCoverUrl] = useState(book.cover_url || "");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);
 
   async function put(body) {
-    const res = await fetch(`/api/books/${book.isbn}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    return res.json();
+    return booksApi.update(book.isbn, body);
   }
 
   async function handleStatusSelect(newStatus) {
@@ -63,7 +60,7 @@ function CollectionMode({ book, setBook, navigate }) {
       let updated;
       if (book.status === "lent") {
         // Return first, then update if not "available"
-        updated = await fetch(`/api/books/${book.isbn}/return`, { method: "POST" }).then((r) => r.json());
+        updated = await booksApi.return(book.isbn);
         if (newStatus !== "available") {
           updated = await put({ status: newStatus });
         }
@@ -103,13 +100,9 @@ function CollectionMode({ book, setBook, navigate }) {
     setSaving(true);
     try {
       if (book.status === "lent") {
-        await fetch(`/api/books/${book.isbn}/return`, { method: "POST" });
+        await booksApi.return(book.isbn);
       }
-      const updated = await fetch(`/api/books/${book.isbn}/lend`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ borrower, due_date: dueDate }),
-      }).then((r) => r.json());
+      const updated = await booksApi.lend(book.isbn, { borrower, due_date: dueDate });
       setBook(updated);
     } finally {
       setSaving(false);
@@ -131,17 +124,35 @@ function CollectionMode({ book, setBook, navigate }) {
   }
 
   async function handleDelete() {
-    await fetch(`/api/books/${book.isbn}`, { method: "DELETE" });
+    await booksApi.remove(book.isbn);
     navigate("/");
+  }
+
+  async function handleCoverSave() {
+    setSaving(true);
+    try {
+      const updated = await put({ cover_url: coverUrl || null });
+      setBook(updated);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-8">
       {/* Book Header */}
       <div className="flex gap-6">
-        <div className="flex h-56 w-36 shrink-0 items-center justify-center rounded-lg bg-muted shadow-md">
-          <BookOpen className="h-8 w-8 text-muted-foreground/40" />
-        </div>
+        {book.cover_url ? (
+          <img
+            src={book.cover_url}
+            alt={book.title}
+            className="h-56 w-36 shrink-0 rounded-lg object-cover shadow-md"
+          />
+        ) : (
+          <div className="flex h-56 w-36 shrink-0 items-center justify-center rounded-lg bg-muted shadow-md">
+            <BookOpen className="h-8 w-8 text-muted-foreground/40" />
+          </div>
+        )}
 
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
@@ -294,6 +305,22 @@ function CollectionMode({ book, setBook, navigate }) {
         </div>
       </div>
 
+      {/* Cover URL */}
+      <div className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_3px_0_rgba(44,37,32,0.04),0_0_0_1px_rgba(44,37,32,0.02)] dark:shadow-none">
+        <h3 className="mb-3 font-heading text-sm font-semibold text-foreground">
+          cover image
+        </h3>
+        <div className="flex gap-2">
+          <Input
+            value={coverUrl}
+            onChange={(e) => setCoverUrl(e.target.value)}
+            placeholder="https://..."
+            className="h-8 text-sm"
+          />
+          <Button size="sm" onClick={handleCoverSave} disabled={saving}>save</Button>
+        </div>
+      </div>
+
       {/* More by author — OpenLibrary phase */}
       <div className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_3px_0_rgba(44,37,32,0.04),0_0_0_1px_rgba(44,37,32,0.02)] dark:shadow-none">
         <h3 className="mb-4 font-heading text-sm font-semibold text-foreground">
@@ -335,13 +362,12 @@ export default function BookDetail() {
   const [notFound, setNotFound] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/books/${id}`)
-      .then((r) => {
-        if (r.status === 404) { setNotFound(true); return null; }
-        return r.json();
-      })
-      .then((data) => { if (data) setBook(data); })
-      .catch(console.error);
+    booksApi.get(id)
+      .then(setBook)
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 404) setNotFound(true);
+        else console.error(err);
+      });
   }, [id]);
 
   if (notFound) {

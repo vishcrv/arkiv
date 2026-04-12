@@ -5,6 +5,7 @@ import {
   Users, MessageSquare, ArrowRightLeft, Heart,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { profileApi, activityApi } from "@/lib/api";
 
 function formatWhen(timestamp) {
   const diffMs = Date.now() - new Date(timestamp).getTime();
@@ -63,16 +64,14 @@ export default function Profile() {
   const [activity, setActivity] = useState([]);
 
   useEffect(() => {
-    fetch("/api/profile")
-      .then((r) => r.json())
+    profileApi.get()
       .then((data) => {
         setProfile(data);
         setStats(data.stats);
       })
       .catch(console.error);
 
-    fetch("/api/activity")
-      .then((r) => r.json())
+    activityApi.get()
       .then(setActivity)
       .catch(console.error);
   }, []);
