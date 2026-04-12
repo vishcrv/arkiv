@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { booksApi, ApiError } from "@/lib/api";
+import { Loading, ErrorBox } from "@/components/states";
 
 // ─── Star Rating ───
 function StarRating({ rating, onRate }) {
@@ -360,15 +361,20 @@ export default function BookDetail() {
   const navigate = useNavigate();
   const [book, setBook] = useState(null);
   const [notFound, setNotFound] = useState(false);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
+  function load() {
+    setError(null);
+    setNotFound(false);
     booksApi.get(id)
       .then(setBook)
       .catch((err) => {
         if (err instanceof ApiError && err.status === 404) setNotFound(true);
-        else console.error(err);
+        else setError(err.message);
       });
-  }, [id]);
+  }
+
+  useEffect(load, [id]);
 
   if (notFound) {
     return (
@@ -382,7 +388,15 @@ export default function BookDetail() {
     );
   }
 
-  if (!book) return null;
+  if (error) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-8">
+        <ErrorBox message={error} onRetry={load} />
+      </div>
+    );
+  }
+
+  if (!book) return <Loading />;
 
   return <CollectionMode book={book} setBook={setBook} navigate={navigate} />;
 }

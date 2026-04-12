@@ -1,8 +1,23 @@
-import { useState, useEffect } from "react";
-import { BookOpen, AlertTriangle, Search } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { BookOpen, AlertTriangle, Search, Plus, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Link, useNavigate } from "react-router-dom";
 import { booksApi, wishlistApi } from "@/lib/api";
+import { Loading, ErrorBox } from "@/components/states";
+
+// Map UI sort labels to backend sort param values.
+// `rating` and `genre` have no first-class SOQL sort, so they fall back
+// to a backend sort and get re-sorted client-side after fetch.
+const SORT_API = {
+  recent: "date_added",
+  "a-z":  "title",
+  rating: "title",
+  author: "author",
+  genre:  "title",
+};
+
+const STATUS_FILTERS = ["all", "reading", "available", "lent", "sold"];
 
 // ─── Currently Reading ───
 function CurrentlyReading({ books }) {
@@ -104,56 +119,77 @@ function Alerts({ overdue }) {
 }
 
 // ─── Filter Bar ───
-function FilterBar({ view, setView, sort, setSort }) {
+function FilterBar({ view, setView, sort, setSort, statusFilter, setStatusFilter }) {
   const sorts = ["recent", "a-z", "genre", "rating", "author"];
 
   return (
-    <div className="flex items-center justify-between">
-      <div className="flex items-center gap-1 rounded-full border border-border bg-card p-1">
-        <button
-          onClick={() => setView("library")}
-          className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
-            view === "library"
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          library
-        </button>
-        <button
-          onClick={() => setView("wishlist")}
-          className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
-            view === "wishlist"
-              ? "bg-primary text-primary-foreground"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          wishlist
-        </button>
-      </div>
-
-      <div className="flex items-center gap-1">
-        <span className="mr-2 text-xs text-muted-foreground">sort:</span>
-        {sorts.map((s) => (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1 rounded-full border border-border bg-card p-1">
           <button
-            key={s}
-            onClick={() => setSort(s)}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-              sort === s
-                ? "bg-primary/10 text-primary"
+            onClick={() => setView("library")}
+            className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
+              view === "library"
+                ? "bg-primary text-primary-foreground"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {s}
+            library
           </button>
-        ))}
+          <button
+            onClick={() => setView("wishlist")}
+            className={`rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
+              view === "wishlist"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            wishlist
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1">
+          <span className="mr-2 text-xs text-muted-foreground">sort:</span>
+          {sorts.map((s) => (
+            <button
+              key={s}
+              onClick={() => setSort(s)}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                sort === s
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {view === "library" && (
+        <div className="flex items-center gap-1">
+          <span className="mr-2 text-xs text-muted-foreground">status:</span>
+          {STATUS_FILTERS.map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                statusFilter === s
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 // ─── Library Grid ───
-function LibraryGrid({ view, books, wishlist }) {
+function LibraryGrid({ view, books, wishlist, onRemoveWishlist, onPromoteWishlist }) {
   if (view === "wishlist") {
     if (wishlist.length === 0) {
       return (
@@ -180,16 +216,36 @@ function LibraryGrid({ view, books, wishlist }) {
       <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {wishlist.map((item) => (
           <div key={item.isbn} className="flex flex-col gap-2">
-            {item.cover_url ? (
-              <img
-                src={item.cover_url}
-                alt={item.title}
-                className="aspect-[2/3] w-full rounded-lg object-cover shadow-sm"
-                onError={(e) => { e.currentTarget.style.display = "none"; }}
-              />
-            ) : (
-              <div className="aspect-[2/3] overflow-hidden rounded-lg bg-muted shadow-sm" />
-            )}
+            <div className="group relative aspect-[2/3] w-full">
+              {item.cover_url ? (
+                <img
+                  src={item.cover_url}
+                  alt={item.title}
+                  className="h-full w-full rounded-lg object-cover shadow-sm"
+                  onError={(e) => { e.currentTarget.style.display = "none"; }}
+                />
+              ) : (
+                <div className="h-full w-full overflow-hidden rounded-lg bg-muted shadow-sm" />
+              )}
+              <div className="absolute inset-0 flex items-center justify-center gap-2 rounded-lg bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => onPromoteWishlist(item)}
+                  title="add to library"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => onRemoveWishlist(item.isbn)}
+                  title="remove from wishlist"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
             <div className="flex flex-col gap-0.5 px-0.5">
               <span className="line-clamp-1 text-sm font-medium text-foreground">
                 {item.title}
@@ -259,15 +315,39 @@ function LibraryGrid({ view, books, wishlist }) {
 
 // ─── Home Page ───
 export default function Home() {
+  const navigate = useNavigate();
   const [view, setView] = useState("library");
   const [sort, setSort] = useState("recent");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [books, setBooks] = useState([]);
   const [wishlist, setWishlist] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    booksApi.list().then(setBooks).catch(console.error);
-    wishlistApi.list().then(setWishlist).catch(console.error);
-  }, []);
+  const fetchData = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    const params = { sort: SORT_API[sort] };
+    if (statusFilter !== "all") params.status = statusFilter;
+
+    Promise.all([booksApi.list(params), wishlistApi.list()])
+      .then(([b, w]) => { setBooks(b); setWishlist(w); })
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [sort, statusFilter]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Client-side resort for sort modes the backend can't handle.
+  const displayBooks = (() => {
+    if (sort === "rating") {
+      return [...books].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    }
+    if (sort === "genre") {
+      return [...books].sort((a, b) => (a.genre || "").localeCompare(b.genre || ""));
+    }
+    return books;
+  })();
 
   const readingBooks = books.filter((b) => b.status === "reading");
 
@@ -283,15 +363,34 @@ export default function Home() {
       ),
     }));
 
-  const sortedBooks = [...books].sort((a, b) => {
-    switch (sort) {
-      case "a-z":    return a.title.localeCompare(b.title);
-      case "genre":  return (a.genre || "").localeCompare(b.genre || "");
-      case "rating": return (b.rating || 0) - (a.rating || 0);
-      case "author": return (a.author_name || "").localeCompare(b.author_name || "");
-      default:       return (b.date_added || "").localeCompare(a.date_added || "");
+  async function handleRemoveWishlist(isbn) {
+    try {
+      await wishlistApi.remove(isbn);
+      setWishlist(wishlist.filter((w) => w.isbn !== isbn));
+    } catch (e) {
+      setError(e.message);
     }
-  });
+  }
+
+  function handlePromoteWishlist(item) {
+    navigate("/discover", { state: { prefill: item } });
+  }
+
+  if (loading && books.length === 0) {
+    return (
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 py-8">
+        <Loading />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-6 py-8">
+        <ErrorBox message={error} onRetry={fetchData} />
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-8 px-6 py-8">
@@ -304,9 +403,22 @@ export default function Home() {
         </div>
       </div>
 
-      <FilterBar view={view} setView={setView} sort={sort} setSort={setSort} />
+      <FilterBar
+        view={view}
+        setView={setView}
+        sort={sort}
+        setSort={setSort}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+      />
 
-      <LibraryGrid view={view} books={sortedBooks} wishlist={wishlist} />
+      <LibraryGrid
+        view={view}
+        books={displayBooks}
+        wishlist={wishlist}
+        onRemoveWishlist={handleRemoveWishlist}
+        onPromoteWishlist={handlePromoteWishlist}
+      />
     </div>
   );
 }

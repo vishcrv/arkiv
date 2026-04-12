@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -71,20 +71,42 @@ function AddAuthorModal({ onClose, onCreated }) {
 
 export default function Discover() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const prefill = location.state?.prefill;
+
   const [mode, setMode] = useState("library"); // "library" | "wishlist"
   const [authors, setAuthors] = useState([]);
   const [showAddAuthor, setShowAddAuthor] = useState(false);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState({
-    isbn: "", title: "", author_id: "", pages: "", year: "",
-    genre: "", publisher: "", description: "", format: "paperback", cover_url: "",
-  });
+  const [form, setForm] = useState(() => ({
+    isbn:        prefill?.isbn        || "",
+    title:       prefill?.title       || "",
+    author_id:   "",
+    pages:       "",
+    year:        prefill?.year ? String(prefill.year) : "",
+    genre:       prefill?.genre       || "",
+    publisher:   "",
+    description: "",
+    format:      "paperback",
+    cover_url:   prefill?.cover_url   || "",
+  }));
 
   useEffect(() => {
-    authorsApi.list().then(setAuthors).catch((e) => setError(e.message));
-  }, []);
+    authorsApi.list()
+      .then((list) => {
+        setAuthors(list);
+        // Try to match the wishlist's author_name to an existing author.
+        if (prefill?.author_name) {
+          const match = list.find(
+            (a) => a.name.toLowerCase() === prefill.author_name.toLowerCase()
+          );
+          if (match) setForm((f) => ({ ...f, author_id: match.id }));
+        }
+      })
+      .catch((e) => setError(e.message));
+  }, [prefill]);
 
   function set(field) {
     return (e) => setForm({ ...form, [field]: e.target.value });

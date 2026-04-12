@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { profileApi, activityApi } from "@/lib/api";
+import { Loading, ErrorBox } from "@/components/states";
 
 function formatWhen(timestamp) {
   const diffMs = Date.now() - new Date(timestamp).getTime();
@@ -62,21 +63,30 @@ export default function Profile() {
   const [profile, setProfile] = useState(null);
   const [stats, setStats] = useState(null);
   const [activity, setActivity] = useState([]);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    profileApi.get()
-      .then((data) => {
-        setProfile(data);
-        setStats(data.stats);
+  function load() {
+    setError(null);
+    Promise.all([profileApi.get(), activityApi.get()])
+      .then(([p, a]) => {
+        setProfile(p);
+        setStats(p.stats);
+        setActivity(a);
       })
-      .catch(console.error);
+      .catch((e) => setError(e.message));
+  }
 
-    activityApi.get()
-      .then(setActivity)
-      .catch(console.error);
-  }, []);
+  useEffect(load, []);
 
-  if (!profile) return null;
+  if (error) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-6 py-8">
+        <ErrorBox message={error} onRetry={load} />
+      </div>
+    );
+  }
+
+  if (!profile) return <Loading />;
 
   const memberSince = formatMemberSince(profile.created_at);
   const initial = profile.username?.[0]?.toUpperCase() ?? "?";
