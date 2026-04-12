@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { Star, BookOpen, ChevronDown, Plus, Check, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { Star, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -32,103 +32,116 @@ function StarRating({ rating, onRate }) {
   );
 }
 
-// ─── Discovery Mode (don't own book) ───
-function DiscoveryMode({ book }) {
-  const [wishlisted, setWishlisted] = useState(false);
-
-  return (
-    <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-8">
-      {/* Book Header */}
-      <div className="flex gap-6">
-        {book.cover ? (
-          <img
-            src={book.cover}
-            alt={book.title}
-            className="h-56 w-36 shrink-0 rounded-lg object-cover shadow-md"
-          />
-        ) : (
-          <div className="flex h-56 w-36 shrink-0 items-center justify-center rounded-lg bg-muted shadow-md">
-            <BookOpen className="h-8 w-8 text-muted-foreground/40" />
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2">
-          <h1 className="font-heading text-2xl font-bold text-foreground">
-            {book.title}
-          </h1>
-          <Link
-            to={`/author/${book.authorId}`}
-            className="text-sm font-medium text-primary hover:underline"
-          >
-            {book.author}
-          </Link>
-
-          <div className="mt-2 flex flex-col gap-1 text-sm text-muted-foreground">
-            {book.year && <span>Published: {book.year}</span>}
-            {book.pages && <span>Pages: {book.pages}</span>}
-            {book.genre && <span>Genre: {book.genre}</span>}
-            {book.publisher && <span>Publisher: {book.publisher}</span>}
-            {book.isbn && <span>ISBN: {book.isbn}</span>}
-          </div>
-        </div>
-      </div>
-
-      {/* Description */}
-      {book.description && (
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {book.description}
-        </p>
-      )}
-
-      {/* Actions */}
-      <div className="flex items-center gap-3">
-        <Button>add to collection</Button>
-        <Button
-          variant={wishlisted ? "secondary" : "outline"}
-          onClick={() => setWishlisted(true)}
-          disabled={wishlisted}
-        >
-          {wishlisted ? (
-            <>
-              <Check className="mr-1.5 h-4 w-4" />
-              in wishlist
-            </>
-          ) : (
-            "add to wishlist"
-          )}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Collection Mode (own book) ───
-function CollectionMode({ book }) {
+// ─── Collection Mode ───
+function CollectionMode({ book, setBook, navigate }) {
   const [status, setStatus] = useState(book.status || "available");
   const [format, setFormat] = useState(book.format || "paperback");
   const [rating, setRating] = useState(book.rating || 0);
   const [thoughts, setThoughts] = useState(book.thoughts || "");
-  const [borrower, setBorrower] = useState(book.borrower || "");
-  const [dueDate, setDueDate] = useState(book.dueDate || "");
-  const [salePrice, setSalePrice] = useState("");
-  const [saleDate, setSaleDate] = useState("");
+  const [borrower, setBorrower] = useState(book.lending?.borrower || "");
+  const [dueDate, setDueDate] = useState(book.lending?.due_date || "");
+  const [salePrice, setSalePrice] = useState(book.sale_price?.toString() || "");
+  const [saleDate, setSaleDate] = useState(book.sale_date || "");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  async function put(body) {
+    const res = await fetch(`/api/books/${book.isbn}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  }
+
+  async function handleStatusSelect(newStatus) {
+    setStatus(newStatus);
+    if (newStatus === "lent" || newStatus === "sold") return; // handled by form
+
+    setSaving(true);
+    try {
+      let updated;
+      if (book.status === "lent") {
+        // Return first, then update if not "available"
+        updated = await fetch(`/api/books/${book.isbn}/return`, { method: "POST" }).then((r) => r.json());
+        if (newStatus !== "available") {
+          updated = await put({ status: newStatus });
+        }
+      } else {
+        updated = await put({ status: newStatus });
+      }
+      setBook(updated);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleFormatChange(newFormat) {
+    setFormat(newFormat);
+    const updated = await put({ format: newFormat });
+    setBook(updated);
+  }
+
+  async function handleRate(star) {
+    setRating(star);
+    const updated = await put({ rating: star });
+    setBook(updated);
+  }
+
+  async function handleThoughtsSave() {
+    setSaving(true);
+    try {
+      const updated = await put({ thoughts });
+      setBook(updated);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleLendSave() {
+    if (!borrower || !dueDate) return;
+    setSaving(true);
+    try {
+      if (book.status === "lent") {
+        await fetch(`/api/books/${book.isbn}/return`, { method: "POST" });
+      }
+      const updated = await fetch(`/api/books/${book.isbn}/lend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ borrower, due_date: dueDate }),
+      }).then((r) => r.json());
+      setBook(updated);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSoldSave() {
+    setSaving(true);
+    try {
+      const updated = await put({
+        status: "sold",
+        sale_price: parseFloat(salePrice) || null,
+        sale_date: saleDate || null,
+      });
+      setBook(updated);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    await fetch(`/api/books/${book.isbn}`, { method: "DELETE" });
+    navigate("/");
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-8">
       {/* Book Header */}
       <div className="flex gap-6">
-        {book.cover ? (
-          <img
-            src={book.cover}
-            alt={book.title}
-            className="h-56 w-36 shrink-0 rounded-lg object-cover shadow-md"
-          />
-        ) : (
-          <div className="flex h-56 w-36 shrink-0 items-center justify-center rounded-lg bg-muted shadow-md">
-            <BookOpen className="h-8 w-8 text-muted-foreground/40" />
-          </div>
-        )}
+        <div className="flex h-56 w-36 shrink-0 items-center justify-center rounded-lg bg-muted shadow-md">
+          <BookOpen className="h-8 w-8 text-muted-foreground/40" />
+        </div>
 
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
@@ -140,19 +153,20 @@ function CollectionMode({ book }) {
             )}
           </div>
           <Link
-            to={`/author/${book.authorId}`}
+            to={`/author/${book.author_id}`}
             className="text-sm font-medium text-primary hover:underline"
           >
-            {book.author}
+            {book.author_name}
           </Link>
 
-          {/* Status + Format Dropdowns */}
+          {/* Status + Format */}
           <div className="mt-3 flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">status:</span>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value)}
+                onChange={(e) => handleStatusSelect(e.target.value)}
+                disabled={saving}
                 className="h-7 rounded-md border border-input bg-card px-2 text-xs text-foreground outline-none focus:border-ring"
               >
                 <option value="reading">reading</option>
@@ -166,7 +180,7 @@ function CollectionMode({ book }) {
               <span className="text-xs text-muted-foreground">format:</span>
               <select
                 value={format}
-                onChange={(e) => setFormat(e.target.value)}
+                onChange={(e) => handleFormatChange(e.target.value)}
                 className="h-7 rounded-md border border-input bg-card px-2 text-xs text-foreground outline-none focus:border-ring"
               >
                 <option value="paperback">paperback</option>
@@ -179,9 +193,9 @@ function CollectionMode({ book }) {
         </div>
       </div>
 
-      {/* Conditional: Lent Fields */}
+      {/* Lent Fields */}
       {status === "lent" && (
-        <div className="flex items-center gap-4 rounded-lg border border-border bg-card p-4">
+        <div className="flex items-end gap-4 rounded-lg border border-border bg-card p-4">
           <div className="flex flex-1 flex-col gap-1">
             <label className="text-xs text-muted-foreground">borrower</label>
             <Input
@@ -200,12 +214,15 @@ function CollectionMode({ book }) {
               className="h-8 text-sm"
             />
           </div>
+          <Button size="sm" onClick={handleLendSave} disabled={saving || !borrower || !dueDate}>
+            save
+          </Button>
         </div>
       )}
 
-      {/* Conditional: Sold Fields */}
+      {/* Sold Fields */}
       {status === "sold" && (
-        <div className="flex items-center gap-4 rounded-lg border border-border bg-card p-4">
+        <div className="flex items-end gap-4 rounded-lg border border-border bg-card p-4">
           <div className="flex flex-1 flex-col gap-1">
             <label className="text-xs text-muted-foreground">sale price</label>
             <Input
@@ -224,17 +241,27 @@ function CollectionMode({ book }) {
               className="h-8 text-sm"
             />
           </div>
+          <Button size="sm" onClick={handleSoldSave} disabled={saving}>
+            save
+          </Button>
         </div>
       )}
 
-      {/* Book Metadata */}
+      {/* Metadata */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-        {book.year && <span>Published: {book.year}</span>}
-        {book.pages && <span>· Pages: {book.pages}</span>}
-        {book.genre && <span>· Genre: {book.genre}</span>}
+        {book.year     && <span>Published: {book.year}</span>}
+        {book.pages    && <span>· Pages: {book.pages}</span>}
+        {book.genre    && <span>· Genre: {book.genre}</span>}
         {book.publisher && <span>· Publisher: {book.publisher}</span>}
-        {book.isbn && <span>· ISBN: {book.isbn}</span>}
+        {book.isbn     && <span>· ISBN: {book.isbn}</span>}
       </div>
+
+      {/* Description */}
+      {book.description && (
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          {book.description}
+        </p>
+      )}
 
       {/* Rating */}
       <div className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_3px_0_rgba(44,37,32,0.04),0_0_0_1px_rgba(44,37,32,0.02)] dark:shadow-none">
@@ -242,7 +269,7 @@ function CollectionMode({ book }) {
           your rating
         </h3>
         <div className="flex items-center gap-3">
-          <StarRating rating={rating} onRate={setRating} />
+          <StarRating rating={rating} onRate={handleRate} />
           {rating === 0 && (
             <span className="text-xs text-muted-foreground">rate this book</span>
           )}
@@ -254,41 +281,25 @@ function CollectionMode({ book }) {
         <h3 className="mb-3 font-heading text-sm font-semibold text-foreground">
           your thoughts
         </h3>
-        {thoughts === "" ? (
-          <div className="flex flex-col gap-3">
-            <textarea
-              placeholder="what did you think?"
-              value={thoughts}
-              onChange={(e) => setThoughts(e.target.value)}
-              className="min-h-[80px] w-full resize-none rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-ring"
-            />
-            <Button size="sm" className="self-end">
-              save
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <textarea
-              value={thoughts}
-              onChange={(e) => setThoughts(e.target.value)}
-              className="min-h-[80px] w-full resize-none rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground outline-none focus:border-ring"
-            />
-            <Button size="sm" className="self-end">
-              save
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-col gap-3">
+          <textarea
+            placeholder="what did you think?"
+            value={thoughts}
+            onChange={(e) => setThoughts(e.target.value)}
+            className="min-h-[80px] w-full resize-none rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-ring"
+          />
+          <Button size="sm" className="self-end" onClick={handleThoughtsSave} disabled={saving}>
+            save
+          </Button>
+        </div>
       </div>
 
-      {/* More by this Author */}
+      {/* More by author — OpenLibrary phase */}
       <div className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_3px_0_rgba(44,37,32,0.04),0_0_0_1px_rgba(44,37,32,0.02)] dark:shadow-none">
         <h3 className="mb-4 font-heading text-sm font-semibold text-foreground">
           more by this author
         </h3>
-        {/* TODO: fetch from OpenLibrary API */}
-        <p className="text-xs text-muted-foreground">
-          no other books found
-        </p>
+        <p className="text-xs text-muted-foreground">coming in the next phase</p>
       </div>
 
       {/* Danger Zone */}
@@ -296,7 +307,7 @@ function CollectionMode({ book }) {
         {confirmDelete ? (
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">are you sure?</span>
-            <Button variant="destructive" size="sm" onClick={() => {/* TODO: remove book */}}>
+            <Button variant="destructive" size="sm" onClick={handleDelete}>
               yes, remove
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
@@ -319,25 +330,33 @@ function CollectionMode({ book }) {
 // ─── Book Detail Page ───
 export default function BookDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const [book, setBook] = useState(null);
+  const [notFound, setNotFound] = useState(false);
 
-  // TODO: load book from store / OpenLibrary API by id (ISBN)
-  // For now, show discovery mode with placeholder data
-  const book = null;
-  const owned = false;
+  useEffect(() => {
+    fetch(`/api/books/${id}`)
+      .then((r) => {
+        if (r.status === 404) { setNotFound(true); return null; }
+        return r.json();
+      })
+      .then((data) => { if (data) setBook(data); })
+      .catch(console.error);
+  }, [id]);
 
-  if (!book) {
+  if (notFound) {
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-6 py-24 text-center">
         <BookOpen className="mb-4 h-10 w-10 text-muted-foreground/40" />
         <p className="font-heading text-base font-medium text-foreground">
           book not found
         </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          ISBN: {id}
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">ISBN: {id}</p>
       </div>
     );
   }
 
-  return owned ? <CollectionMode book={book} /> : <DiscoveryMode book={book} />;
+  if (!book) return null;
+
+  return <CollectionMode book={book} setBook={setBook} navigate={navigate} />;
 }

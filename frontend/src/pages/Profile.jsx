@@ -1,15 +1,27 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
-  BookOpen,
-  BookCheck,
-  Eye,
-  FileText,
-  Users,
-  MessageSquare,
-  ArrowRightLeft,
-  Heart,
+  BookOpen, BookCheck, Eye, FileText,
+  Users, MessageSquare, ArrowRightLeft, Heart,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+
+function formatWhen(timestamp) {
+  const diffMs = Date.now() - new Date(timestamp).getTime();
+  const days = Math.floor(diffMs / 86400000);
+  if (days === 0) return "today";
+  if (days === 1) return "1d ago";
+  if (days < 30) return `${days}d ago`;
+  if (days < 365) return `${Math.floor(days / 30)}mo ago`;
+  return `${Math.floor(days / 365)}y ago`;
+}
+
+function formatMemberSince(isoDate) {
+  if (!isoDate || isoDate.startsWith("1970")) return null;
+  return new Date(isoDate)
+    .toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    .toLowerCase();
+}
 
 function StatCard({ icon: Icon, label, value }) {
   return (
@@ -26,21 +38,19 @@ function StatCard({ icon: Icon, label, value }) {
 function ActivityItem({ item }) {
   return (
     <div className="flex items-start gap-3 py-2">
-      <span className="mt-0.5 shrink-0 text-xs text-muted-foreground w-16">
-        {item.when}
+      <span className="mt-0.5 w-16 shrink-0 text-xs text-muted-foreground">
+        {formatWhen(item.timestamp)}
       </span>
       <span className="text-sm text-foreground">
-        {item.action}{" "}
-        {item.bookId && (
+        {item.isbn ? (
           <Link
-            to={`/book/${item.bookId}`}
+            to={`/book/${item.isbn}`}
             className="font-medium text-primary hover:underline"
           >
-            "{item.bookTitle}"
+            {item.detail}
           </Link>
-        )}
-        {item.extra && (
-          <span className="text-muted-foreground"> {item.extra}</span>
+        ) : (
+          item.detail
         )}
       </span>
     </div>
@@ -48,20 +58,29 @@ function ActivityItem({ item }) {
 }
 
 export default function Profile() {
-  // TODO: calculate from real store data
-  const stats = {
-    booksOwned: 0,
-    booksRead: 0,
-    currentlyReading: 0,
-    pagesRead: 0,
-    authors: 0,
-    reviews: 0,
-    lentOut: 0,
-    wishlist: 0,
-  };
+  const [profile, setProfile] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [activity, setActivity] = useState([]);
 
-  // TODO: generate from real activity log
-  const activity = [];
+  useEffect(() => {
+    fetch("/api/profile")
+      .then((r) => r.json())
+      .then((data) => {
+        setProfile(data);
+        setStats(data.stats);
+      })
+      .catch(console.error);
+
+    fetch("/api/activity")
+      .then((r) => r.json())
+      .then(setActivity)
+      .catch(console.error);
+  }, []);
+
+  if (!profile) return null;
+
+  const memberSince = formatMemberSince(profile.created_at);
+  const initial = profile.username?.[0]?.toUpperCase() ?? "?";
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-8 px-6 py-8">
@@ -69,30 +88,34 @@ export default function Profile() {
       <div className="flex items-center gap-4">
         <Avatar className="h-16 w-16">
           <AvatarFallback className="bg-primary/10 text-lg font-semibold text-primary">
-            V
+            {initial}
           </AvatarFallback>
         </Avatar>
         <div className="flex flex-col">
           <h1 className="font-heading text-xl font-bold text-foreground">
-            vishcrv
+            {profile.username}
           </h1>
-          <span className="text-sm text-muted-foreground">
-            member since march 2026
-          </span>
+          {memberSince && (
+            <span className="text-sm text-muted-foreground">
+              member since {memberSince}
+            </span>
+          )}
         </div>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard icon={BookOpen} label="books owned" value={stats.booksOwned} />
-        <StatCard icon={BookCheck} label="books read" value={stats.booksRead} />
-        <StatCard icon={Eye} label="currently reading" value={stats.currentlyReading} />
-        <StatCard icon={FileText} label="pages read" value={stats.pagesRead.toLocaleString()} />
-        <StatCard icon={Users} label="authors" value={stats.authors} />
-        <StatCard icon={MessageSquare} label="reviews" value={stats.reviews} />
-        <StatCard icon={ArrowRightLeft} label="lent out" value={stats.lentOut} />
-        <StatCard icon={Heart} label="wishlist" value={stats.wishlist} />
-      </div>
+      {stats && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatCard icon={BookOpen}        label="books owned"       value={stats.books_owned} />
+          <StatCard icon={BookCheck}       label="books read"        value={stats.books_read} />
+          <StatCard icon={Eye}             label="currently reading" value={stats.currently_reading} />
+          <StatCard icon={FileText}        label="pages read"        value={stats.pages_read.toLocaleString()} />
+          <StatCard icon={Users}           label="authors"           value={stats.authors_in_collection} />
+          <StatCard icon={MessageSquare}   label="reviews"           value={stats.reviews_logged} />
+          <StatCard icon={ArrowRightLeft}  label="lent out"          value={stats.books_lent} />
+          <StatCard icon={Heart}           label="wishlist"          value={stats.wishlist_count} />
+        </div>
+      )}
 
       {/* Recent Activity */}
       <div className="rounded-xl border border-border bg-card p-5 shadow-[0_1px_3px_0_rgba(44,37,32,0.04),0_0_0_1px_rgba(44,37,32,0.02)] dark:shadow-none">

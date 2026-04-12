@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-import store
+import store.sf as store
 
 app = FastAPI(title="Arkiv API", version="1.0.0")
 
@@ -106,8 +106,8 @@ def list_books(
     before: Optional[int] = None,
     sort: str = Query("title", pattern="^(title|year|author|date_added)$"),
 ):
-    db = store.load()
-    books = list(db["books"].items())
+    books = store.list_books()
+    authors = store.all_authors_dict()
 
     if genre:
         books = [(i, b) for i, b in books if b.get("genre", "").lower() == genre.lower()]
@@ -121,11 +121,11 @@ def list_books(
     sort_fns: dict[str, Any] = {
         "title":      lambda x: x[1].get("title", "").lower(),
         "year":       lambda x: x[1].get("year", 0),
-        "author":     lambda x: (db["authors"].get(x[1].get("author_id", ""), {}) or {}).get("name", "").lower(),
+        "author":     lambda x: (authors.get(x[1].get("author_id", ""), {}) or {}).get("name", "").lower(),
         "date_added": lambda x: x[1].get("date_added", ""),
     }
     books.sort(key=sort_fns[sort])
-    return [_book_out(i, b, db["authors"]) for i, b in books]
+    return [_book_out(i, b, authors) for i, b in books]
 
 
 @app.get("/api/books/{isbn}")
@@ -134,7 +134,7 @@ def get_book(isbn: str):
     book = store.get_book(db, isbn)
     if book is None:
         raise HTTPException(404, "Book not found")
-    return _book_out(isbn, book, db["authors"])
+    return _book_out(isbn, book, store.all_authors_dict())
 
 
 @app.post("/api/books", status_code=201)
@@ -142,7 +142,7 @@ def add_book(body: BookIn):
     db = store.load()
     if store.get_book(db, body.isbn):
         raise HTTPException(409, "ISBN already exists")
-    if body.author_id not in db["authors"]:
+    if store.get_author(db, body.author_id) is None:
         raise HTTPException(404, "author_id not found")
 
     book = {
@@ -171,7 +171,7 @@ def add_book(body: BookIn):
         store.log_activity(db, "wishlist_removed", f"Moved '{body.title}' from wishlist to collection", isbn=body.isbn)
 
     store.save(db)
-    return _book_out(body.isbn, book, db["authors"])
+    return _book_out(body.isbn, book, store.all_authors_dict())
 
 
 @app.put("/api/books/{isbn}")
@@ -183,7 +183,7 @@ def update_book(isbn: str, body: BookUpdate):
 
     data = body.model_dump(exclude_unset=True)
 
-    if "author_id" in data and data["author_id"] not in db["authors"]:
+    if "author_id" in data and store.get_author(db, data["author_id"]) is None:
         raise HTTPException(404, "author_id not found")
 
     if "status" in data and data["status"] not in ("available", "lent", "reading", "sold"):
@@ -213,7 +213,7 @@ def update_book(isbn: str, body: BookUpdate):
 
     store.put_book(db, isbn, book)
     store.save(db)
-    return _book_out(isbn, book, db["authors"])
+    return _book_out(isbn, book, store.all_authors_dict())
 
 
 @app.delete("/api/books/{isbn}")
@@ -245,7 +245,7 @@ def lend_book(isbn: str, body: LendIn):
     store.put_book(db, isbn, book)
     store.log_activity(db, "lent", f"Lent '{book['title']}' to {body.borrower}", isbn=isbn)
     store.save(db)
-    return _book_out(isbn, book, db["authors"])
+    return _book_out(isbn, book, store.all_authors_dict())
 
 
 @app.post("/api/books/{isbn}/return")
@@ -263,15 +263,15 @@ def return_book(isbn: str):
     store.put_book(db, isbn, book)
     store.log_activity(db, "returned", f"Returned '{book['title']}' from {borrower}", isbn=isbn)
     store.save(db)
-    return _book_out(isbn, book, db["authors"])
+    return _book_out(isbn, book, store.all_authors_dict())
 
 
 # ── authors ──────────────────────────────────────────────────────────────────
 
 @app.get("/api/authors")
 def list_authors():
-    db = store.load()
-    authors = sorted(db["authors"].items(), key=lambda x: x[1]["name"].lower())
+    authors = store.list_authors()
+    authors.sort(key=lambda x: x[1]["name"].lower())
     return [{"id": aid, **a} for aid, a in authors]
 
 
@@ -281,9 +281,10 @@ def get_author(author_id: str):
     author = store.get_author(db, author_id)
     if author is None:
         raise HTTPException(404, "Author not found")
+    authors = store.all_authors_dict()
     books = [
-        _book_out(isbn, b, db["authors"])
-        for isbn, b in db["books"].items()
+        _book_out(isbn, b, authors)
+        for isbn, b in store.list_books()
         if b["author_id"] == author_id
     ]
     return {"id": author_id, **author, "books": books}
@@ -292,11 +293,9 @@ def get_author(author_id: str):
 @app.post("/api/authors", status_code=201)
 def add_author(body: AuthorIn):
     db = store.load()
-    author_id = store.new_author_id()
     author = {"name": body.name, "country": body.country, "dob": body.dob, "awards": body.awards}
-    store.put_author(db, author_id, author)
+    author_id = store.create_author(db, author)
     store.log_activity(db, "author_added", f"Added author '{body.name}'")
-    store.save(db)
     return {"id": author_id, **author}
 
 
@@ -330,7 +329,7 @@ def delete_author(author_id: str):
     db = store.load()
     if not store.get_author(db, author_id):
         raise HTTPException(404, "Author not found")
-    linked = [isbn for isbn, b in db["books"].items() if b["author_id"] == author_id]
+    linked = [isbn for isbn, b in store.list_books() if b["author_id"] == author_id]
     if linked:
         raise HTTPException(409, f"Cannot remove: linked to {len(linked)} book(s)")
     store.delete_author(db, author_id)
@@ -342,8 +341,7 @@ def delete_author(author_id: str):
 
 @app.get("/api/wishlist")
 def list_wishlist():
-    db = store.load()
-    return [{"isbn": isbn, **item} for isbn, item in db["wishlist"].items()]
+    return [{"isbn": isbn, **item} for isbn, item in store.list_wishlist()]
 
 
 @app.post("/api/wishlist", status_code=201)
@@ -396,5 +394,4 @@ def get_stats():
 
 @app.get("/api/activity")
 def get_activity(limit: int = Query(50, ge=1, le=500)):
-    db = store.load()
-    return list(reversed(db["activity"]))[:limit]
+    return store.list_activity(limit)

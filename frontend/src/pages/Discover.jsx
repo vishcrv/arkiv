@@ -4,9 +4,13 @@ import { Search, Plus, Check, BookOpen } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-function SearchResult({ book }) {
-  // TODO: check against real collection data
-  const [added, setAdded] = useState(false);
+function SearchResult({ book, onAddToWishlist }) {
+  const [added, setAdded] = useState(book.inWishlist || false);
+
+  async function handleAdd() {
+    await onAddToWishlist(book);
+    setAdded(true);
+  }
 
   return (
     <div className="flex items-center gap-4 rounded-xl border border-border bg-card p-4 shadow-[0_1px_3px_0_rgba(44,37,32,0.04),0_0_0_1px_rgba(44,37,32,0.02)] dark:shadow-none transition-colors">
@@ -41,7 +45,7 @@ function SearchResult({ book }) {
       <Button
         variant={added ? "secondary" : "outline"}
         size="icon"
-        onClick={() => setAdded(true)}
+        onClick={handleAdd}
         disabled={added}
         className="shrink-0"
       >
@@ -57,8 +61,23 @@ function SearchResult({ book }) {
 
 export default function Discover() {
   const [query, setQuery] = useState("");
-  // TODO: replace with real OpenLibrary API search
+  // TODO (OpenLibrary phase): wire up search to OL API
+  // results shape: [{ isbn, title, author, year, pages, cover, genre }]
   const results = [];
+
+  async function handleAddToWishlist(book) {
+    await fetch("/api/wishlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        isbn: book.isbn,
+        title: book.title,
+        author_name: book.author,
+        year: book.year || 0,
+        genre: book.genre || "",
+      }),
+    });
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-6 py-8">
@@ -98,7 +117,11 @@ export default function Discover() {
       ) : (
         <div className="flex flex-col gap-3">
           {results.map((book) => (
-            <SearchResult key={book.isbn} book={book} />
+            <SearchResult
+              key={book.isbn}
+              book={book}
+              onAddToWishlist={handleAddToWishlist}
+            />
           ))}
         </div>
       )}
