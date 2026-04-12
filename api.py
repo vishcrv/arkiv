@@ -5,11 +5,18 @@ Docs: http://localhost:5000/docs
 """
 
 from datetime import date, datetime, timezone
-from typing import Any, Optional
+from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from simple_salesforce.exceptions import (
+    SalesforceAuthenticationFailed,
+    SalesforceError,
+    SalesforceMalformedRequest,
+    SalesforceResourceNotFound,
+)
 
 import store.sf as store
 
@@ -44,6 +51,7 @@ class BookIn(BaseModel):
     publisher: str = ""
     description: Optional[str] = None
     format: str = "paperback"
+    cover_url: Optional[str] = None
 
 
 class BookUpdate(BaseModel):
@@ -61,6 +69,7 @@ class BookUpdate(BaseModel):
     date_read: Optional[str] = None
     sale_price: Optional[float] = None
     sale_date: Optional[str] = None
+    cover_url: Optional[str] = None
 
 
 class LendIn(BaseModel):
@@ -106,7 +115,7 @@ def list_books(
     before: Optional[int] = None,
     sort: str = Query("title", pattern="^(title|year|author|date_added)$"),
 ):
-    books = store.list_books()
+    books = store.list_books(sort=sort)  # SOQL ORDER BY pushed down
     authors = store.all_authors_dict()
 
     if genre:
@@ -118,13 +127,6 @@ def list_books(
     if before:
         books = [(i, b) for i, b in books if b.get("year", 0) < before]
 
-    sort_fns: dict[str, Any] = {
-        "title":      lambda x: x[1].get("title", "").lower(),
-        "year":       lambda x: x[1].get("year", 0),
-        "author":     lambda x: (authors.get(x[1].get("author_id", ""), {}) or {}).get("name", "").lower(),
-        "date_added": lambda x: x[1].get("date_added", ""),
-    }
-    books.sort(key=sort_fns[sort])
     return [_book_out(i, b, authors) for i, b in books]
 
 
@@ -162,6 +164,7 @@ def add_book(body: BookIn):
         "date_read": None,
         "sale_price": None,
         "sale_date": None,
+        "cover_url": body.cover_url,
     }
     store.put_book(db, body.isbn, book)
     store.log_activity(db, "added", f"Added '{body.title}'", isbn=body.isbn)
@@ -190,7 +193,8 @@ def update_book(isbn: str, body: BookUpdate):
         raise HTTPException(400, "status must be available | lent | reading | sold")
 
     for field in ("title", "author_id", "pages", "year", "genre", "publisher",
-                  "description", "thoughts", "format", "date_read", "sale_price", "sale_date"):
+                  "description", "thoughts", "format", "date_read", "sale_price", "sale_date",
+                  "cover_url"):
         if field in data:
             book[field] = data[field]
 
@@ -395,3 +399,44 @@ def get_stats():
 @app.get("/api/activity")
 def get_activity(limit: int = Query(50, ge=1, le=500)):
     return store.list_activity(limit)
+
+
+# ── Salesforce exception handlers ────────────────────────────────────────────
+# Map simple-salesforce errors to clean HTTP responses instead of raw 500s.
+
+def _sf_error_payload(exc: SalesforceError) -> dict:
+    """Pull the first error message out of a SalesforceError, fall back to str()."""
+    content = getattr(exc, "content", None)
+    if isinstance(content, list) and content:
+        first = content[0]
+        if isinstance(first, dict):
+            return {
+                "detail": first.get("message") or str(exc),
+                "code": first.get("errorCode"),
+            }
+    return {"detail": str(exc)}
+
+
+@app.exception_handler(SalesforceMalformedRequest)
+def _handle_sf_malformed(request: Request, exc: SalesforceMalformedRequest):
+    # Validation rule, picklist mismatch, missing required field, bad SOQL, etc.
+    return JSONResponse(status_code=400, content=_sf_error_payload(exc))
+
+
+@app.exception_handler(SalesforceResourceNotFound)
+def _handle_sf_not_found(request: Request, exc: SalesforceResourceNotFound):
+    return JSONResponse(status_code=404, content={"detail": "Salesforce record not found"})
+
+
+@app.exception_handler(SalesforceAuthenticationFailed)
+def _handle_sf_auth(request: Request, exc: SalesforceAuthenticationFailed):
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Salesforce authentication failed — check .env credentials"},
+    )
+
+
+@app.exception_handler(SalesforceError)
+def _handle_sf_other(request: Request, exc: SalesforceError):
+    # Catch-all for anything simple-salesforce raises that we didn't list above.
+    return JSONResponse(status_code=502, content=_sf_error_payload(exc))

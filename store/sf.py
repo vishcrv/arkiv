@@ -45,8 +45,16 @@ _BOOK_FIELDS = (
     "Id, Name, ISBN__c, Author__c, Pages__c, Year__c, Genre__c, Publisher__c, "
     "Status__c, Format__c, Description__c, Rating__c, Thoughts__c, "
     "Date_Added__c, Date_Read__c, Sale_Price__c, Sale_Date__c, "
-    "Borrower__c, Due_Date__c"
+    "Borrower__c, Due_Date__c, Cover_URL__c"
 )
+
+# api.py sort param → SOQL ORDER BY clause
+_BOOK_SORT_MAP = {
+    "title": "Name",
+    "year": "Year__c",
+    "author": "Author__r.Name",
+    "date_added": "Date_Added__c",
+}
 
 
 def _sf_to_book(rec: dict) -> dict:
@@ -70,6 +78,7 @@ def _sf_to_book(rec: dict) -> dict:
         "date_read": rec.get("Date_Read__c"),
         "sale_price": float(rec["Sale_Price__c"]) if rec.get("Sale_Price__c") is not None else None,
         "sale_date": rec.get("Sale_Date__c"),
+        "cover_url": rec.get("Cover_URL__c"),
     }
 
 
@@ -90,6 +99,7 @@ def _book_to_sf(isbn: str, book: dict) -> dict:
         "Date_Read__c": book.get("date_read"),
         "Sale_Price__c": book.get("sale_price"),
         "Sale_Date__c": book.get("sale_date"),
+        "Cover_URL__c": book.get("cover_url"),
     }
     lending = book.get("lending")
     data["Borrower__c"] = lending["borrower"] if lending else None
@@ -123,10 +133,15 @@ def delete_book(store, isbn: str) -> bool:
     return True
 
 
-def list_books() -> list[tuple[str, dict]]:
-    """Returns [(isbn, book_dict), ...] — used by api.py list_books endpoint."""
+def list_books(sort: str = "title") -> list[tuple[str, dict]]:
+    """Returns [(isbn, book_dict), ...] — used by api.py list_books endpoint.
+
+    `sort` accepts the same keys as the api.py query param: title|year|author|date_added.
+    SOQL ORDER BY is pushed down to Salesforce so we don't sort in Python.
+    """
     sf = _connect()
-    res = sf.query(f"SELECT {_BOOK_FIELDS} FROM Book__c")
+    order_by = _BOOK_SORT_MAP.get(sort, "Name")
+    res = sf.query(f"SELECT {_BOOK_FIELDS} FROM Book__c ORDER BY {order_by}")
     return [(r["ISBN__c"], _sf_to_book(r)) for r in res["records"]]
 
 
