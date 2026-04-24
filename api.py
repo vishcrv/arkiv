@@ -11,12 +11,8 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
-from simple_salesforce.exceptions import (
-    SalesforceAuthenticationFailed,
-    SalesforceError,
-    SalesforceMalformedRequest,
-    SalesforceResourceNotFound,
-)
+from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
+import store.mysql as store
 
 import store.sf as store
 
@@ -400,43 +396,24 @@ def get_stats():
 def get_activity(limit: int = Query(50, ge=1, le=500)):
     return store.list_activity(limit)
 
+# ── DB exception handlers ────────────────────────────────────────────────────
+# Map SQLAlchemy errors to clean HTTP responses instead of raw 500s.
 
-# ── Salesforce exception handlers ────────────────────────────────────────────
-# Map simple-salesforce errors to clean HTTP responses instead of raw 500s.
-
-def _sf_error_payload(exc: SalesforceError) -> dict:
-    """Pull the first error message out of a SalesforceError, fall back to str()."""
-    content = getattr(exc, "content", None)
-    if isinstance(content, list) and content:
-        first = content[0]
-        if isinstance(first, dict):
-            return {
-                "detail": first.get("message") or str(exc),
-                "code": first.get("errorCode"),
-            }
-    return {"detail": str(exc)}
+@app.exception_handler(IntegrityError)
+def _handle_integrity(request: Request, exc: IntegrityError):
+    # FK violation, duplicate key, NOT NULL violation, etc.
+    return JSONResponse(status_code=409, content={"detail": str(exc.orig), "code": "integrity_error"})
 
 
-@app.exception_handler(SalesforceMalformedRequest)
-def _handle_sf_malformed(request: Request, exc: SalesforceMalformedRequest):
-    # Validation rule, picklist mismatch, missing required field, bad SOQL, etc.
-    return JSONResponse(status_code=400, content=_sf_error_payload(exc))
-
-
-@app.exception_handler(SalesforceResourceNotFound)
-def _handle_sf_not_found(request: Request, exc: SalesforceResourceNotFound):
-    return JSONResponse(status_code=404, content={"detail": "Salesforce record not found"})
-
-
-@app.exception_handler(SalesforceAuthenticationFailed)
-def _handle_sf_auth(request: Request, exc: SalesforceAuthenticationFailed):
+@app.exception_handler(OperationalError)
+def _handle_operational(request: Request, exc: OperationalError):
+    # Connection refused, auth failed, server gone away, etc.
     return JSONResponse(
         status_code=503,
-        content={"detail": "Salesforce authentication failed — check .env credentials"},
+        content={"detail": "Database unavailable — check MYSQL_URL and that MySQL is running", "code": "db_unavailable"},
     )
 
 
-@app.exception_handler(SalesforceError)
-def _handle_sf_other(request: Request, exc: SalesforceError):
-    # Catch-all for anything simple-salesforce raises that we didn't list above.
-    return JSONResponse(status_code=502, content=_sf_error_payload(exc))
+@app.exception_handler(SQLAlchemyError)
+def _handle_sqlalchemy(request: Request, exc: SQLAlchemyError):
+    return JSONResponse(status_code=502, content={"detail": str(exc), "code": "db_error"})
