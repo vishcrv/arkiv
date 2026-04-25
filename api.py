@@ -14,8 +14,6 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError, OperationalError, SQLAlchemyError
 import store.mysql as store
 
-import store.sf as store
-
 app = FastAPI(title="Arkiv API", version="1.0.0")
 
 app.add_middleware(

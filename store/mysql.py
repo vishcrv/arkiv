@@ -1,7 +1,4 @@
-"""
-Arkiv data layer — MySQL backend.
-Drop-in for store/sf.py. Same function names, same call shape.
-"""
+"""Arkiv data layer — MySQL backend."""
 import json
 import os
 import uuid
