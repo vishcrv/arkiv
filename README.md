@@ -11,7 +11,7 @@ Stack:
 
 ## Architecture
 
-[`docs/diagrams/architecture.html`](docs/diagrams/architecture.html)
+![Salesforce architecture — FastAPI + SOQL](docs/diagrams/architecture.png)
 
 Browser → React SPA → FastAPI → `store/sf.py` → Salesforce. The data layer is swappable — same function names as the legacy JSON store, so `api.py` doesn't know or care what's behind the call.
 
