@@ -11,7 +11,7 @@ Stack:
 
 ## Architecture
 
-[`docs/diagrams/architecture.html`](docs/diagrams/architecture.html)
+![Frontend architecture — React SPA, no backend](docs/diagrams/architecture.png)
 
 Browser loads the SPA from Vite. Pages are wired up but the data calls are still stubs — this branch represents the moment React stood on its own, before the Salesforce backend came online in the next stage.
 
