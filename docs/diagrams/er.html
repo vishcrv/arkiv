@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Arkiv · Data Model</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Geist', system-ui, sans-serif; background: #ffffff; color: #2d3142; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1080px; width: 100%; }
+    .eyebrow { font-family: 'Geist Mono', monospace; font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #4f5d75; margin-bottom: 0.5rem; }
+    h1 { font-family: 'Instrument Serif', serif; font-size: 2rem; font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 960px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Data model · Arkiv</p>
+    <h1>MySQL schema — five tables</h1>
+
+    <svg viewBox="0 0 1000 560" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100%" height="100%" fill="#ffffff"/>
+
+      <!-- Relationship: authors 1 — N books -->
+      <line x1="280" y1="200" x2="320" y2="200" stroke="#4f5d75" stroke-width="1"/>
+      <rect x="284" y="184" width="12" height="12" rx="2" fill="#ffffff"/>
+      <text x="290" y="194" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">1</text>
+      <rect x="304" y="184" width="16" height="12" rx="2" fill="#ffffff"/>
+      <text x="312" y="194" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="middle" font-weight="600">N</text>
+      <rect x="284" y="204" width="40" height="12" rx="2" fill="#ffffff"/>
+      <text x="304" y="214" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.12em">WRITES</text>
+
+      <!-- Entity: authors -->
+      <rect x="40" y="120" width="240" height="160" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="40" y="120" width="240" height="40" rx="6" fill="rgba(45,49,66,0.04)" stroke="none"/>
+      <rect x="40" y="152" width="240" height="8" fill="rgba(45,49,66,0.04)"/>
+      <line x1="40" y1="160" x2="280" y2="160" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+      <text x="56" y="136" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">ENTITY</text>
+      <text x="56" y="152" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif">authors</text>
+      <text x="56" y="180" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace"># author_id</text>
+      <text x="260" y="180" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">varchar(16)</text>
+      <text x="56" y="200" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">name</text>
+      <text x="260" y="200" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">varchar</text>
+      <text x="56" y="220" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">country</text>
+      <text x="260" y="220" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">varchar</text>
+      <text x="56" y="240" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">dob</text>
+      <text x="260" y="240" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">varchar(10)</text>
+      <text x="56" y="260" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">awards</text>
+      <text x="260" y="260" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">json</text>
+
+      <!-- Entity: books (focal / aggregate root) -->
+      <rect x="320" y="80" width="280" height="260" rx="6" fill="rgba(235,108,54,0.04)" stroke="#eb6c36" stroke-width="1"/>
+      <rect x="320" y="80" width="280" height="40" rx="6" fill="rgba(235,108,54,0.10)" stroke="none"/>
+      <rect x="320" y="112" width="280" height="8" fill="rgba(235,108,54,0.10)"/>
+      <line x1="320" y1="120" x2="600" y2="120" stroke="rgba(235,108,54,0.40)" stroke-width="1"/>
+      <text x="336" y="96" fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">ENTITY · AGGREGATE ROOT</text>
+      <text x="336" y="112" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif">books</text>
+      <text x="336" y="140" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace"># isbn</text>
+      <text x="580" y="140" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">varchar(20)</text>
+      <text x="336" y="160" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">title</text>
+      <text x="580" y="160" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">varchar</text>
+      <text x="336" y="180" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">→ author_id</text>
+      <text x="580" y="180" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">fk</text>
+      <text x="336" y="200" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">year · genre · pages</text>
+      <text x="580" y="200" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">—</text>
+      <text x="336" y="220" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">status</text>
+      <text x="580" y="220" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">enum · indexed</text>
+      <text x="336" y="240" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">format · publisher</text>
+      <text x="580" y="240" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">—</text>
+      <text x="336" y="260" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">rating · thoughts</text>
+      <text x="580" y="260" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">—</text>
+      <text x="336" y="280" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">cover_url · description</text>
+      <text x="580" y="280" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">—</text>
+      <text x="336" y="300" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">borrower · due_date</text>
+      <text x="580" y="300" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">lending</text>
+      <text x="336" y="320" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">sale_price · sale_date</text>
+      <text x="580" y="320" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">—</text>
+
+      <!-- Entity: profile -->
+      <rect x="640" y="80" width="240" height="120" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="640" y="80" width="240" height="40" rx="6" fill="rgba(45,49,66,0.04)" stroke="none"/>
+      <rect x="640" y="112" width="240" height="8" fill="rgba(45,49,66,0.04)"/>
+      <line x1="640" y1="120" x2="880" y2="120" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+      <text x="656" y="96" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">ENTITY · SINGLETON</text>
+      <text x="656" y="112" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif">profile</text>
+      <text x="656" y="140" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace"># id</text>
+      <text x="860" y="140" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">tinyint = 1</text>
+      <text x="656" y="160" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">username</text>
+      <text x="860" y="160" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">varchar</text>
+      <text x="656" y="180" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">created_at</text>
+      <text x="860" y="180" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">datetime</text>
+
+      <!-- Entity: activity -->
+      <rect x="640" y="240" width="240" height="140" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="640" y="240" width="240" height="40" rx="6" fill="rgba(45,49,66,0.04)" stroke="none"/>
+      <rect x="640" y="272" width="240" height="8" fill="rgba(45,49,66,0.04)"/>
+      <line x1="640" y1="280" x2="880" y2="280" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+      <text x="656" y="256" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">ENTITY · LOG</text>
+      <text x="656" y="272" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif">activity</text>
+      <text x="656" y="300" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace"># id</text>
+      <text x="860" y="300" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">bigint · auto</text>
+      <text x="656" y="320" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">action</text>
+      <text x="860" y="320" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">varchar</text>
+      <text x="656" y="340" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">isbn · detail</text>
+      <text x="860" y="340" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">—</text>
+      <text x="656" y="360" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">timestamp</text>
+      <text x="860" y="360" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">datetime · idx</text>
+
+      <!-- Entity: wishlist -->
+      <rect x="40" y="340" width="240" height="140" rx="6" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <rect x="40" y="340" width="240" height="40" rx="6" fill="rgba(45,49,66,0.04)" stroke="none"/>
+      <rect x="40" y="372" width="240" height="8" fill="rgba(45,49,66,0.04)"/>
+      <line x1="40" y1="380" x2="280" y2="380" stroke="rgba(45,49,66,0.22)" stroke-width="1"/>
+      <text x="56" y="356" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.14em">ENTITY</text>
+      <text x="56" y="372" fill="#2d3142" font-size="14" font-weight="600" font-family="'Geist', sans-serif">wishlist</text>
+      <text x="56" y="400" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace"># isbn</text>
+      <text x="260" y="400" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">varchar(20)</text>
+      <text x="56" y="420" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">title</text>
+      <text x="260" y="420" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">varchar</text>
+      <text x="56" y="440" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">author_name</text>
+      <text x="260" y="440" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">varchar</text>
+      <text x="56" y="460" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">year · genre</text>
+      <text x="260" y="460" fill="#4f5d75" font-size="10" font-family="'Geist Mono', monospace" text-anchor="end">—</text>
+
+      <!-- Legend -->
+      <line x1="40" y1="504" x2="960" y2="504" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+      <text x="40" y="520" fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+
+      <rect x="40" y="536" width="14" height="10" rx="2" fill="rgba(235,108,54,0.04)" stroke="#eb6c36" stroke-width="1"/>
+      <text x="60" y="544" fill="#4f5d75" font-size="9" font-family="'Geist', sans-serif">Aggregate root</text>
+
+      <rect x="180" y="536" width="14" height="10" rx="2" fill="#ffffff" stroke="#2d3142" stroke-width="1"/>
+      <text x="200" y="544" fill="#4f5d75" font-size="9" font-family="'Geist', sans-serif">Entity</text>
+
+      <text x="300" y="544" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace"># pk</text>
+      <text x="340" y="544" fill="#4f5d75" font-size="9" font-family="'Geist', sans-serif">Primary key</text>
+
+      <text x="460" y="544" fill="#2d3142" font-size="10" font-family="'Geist Mono', monospace">→ fk</text>
+      <text x="500" y="544" fill="#4f5d75" font-size="9" font-family="'Geist', sans-serif">Foreign key</text>
+    </svg>
+  </div>
+</body>
+</html>

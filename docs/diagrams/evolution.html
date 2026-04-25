@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Arkiv · Evolution</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Geist', system-ui, sans-serif; background: #ffffff; color: #2d3142; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 2rem; }
+    .frame { max-width: 1080px; width: 100%; }
+    .eyebrow { font-family: 'Geist Mono', monospace; font-size: 0.66rem; font-weight: 500; letter-spacing: 0.18em; text-transform: uppercase; color: #4f5d75; margin-bottom: 0.5rem; }
+    h1 { font-family: 'Instrument Serif', serif; font-size: 2rem; font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }
+    svg { width: 100%; min-width: 960px; display: block; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Timeline · Arkiv</p>
+    <h1>Evolution — four stages, one collection</h1>
+
+    <svg viewBox="0 0 1000 320" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100%" height="100%" fill="#ffffff"/>
+
+      <!-- Baseline -->
+      <line x1="60" y1="180" x2="940" y2="180" stroke="#4f5d75" stroke-width="1"/>
+
+      <!-- Hairline drops (event → label) -->
+      <line x1="160" y1="176" x2="160" y2="120" stroke="rgba(45,49,66,0.20)" stroke-width="0.8"/>
+      <line x1="400" y1="176" x2="400" y2="120" stroke="rgba(45,49,66,0.20)" stroke-width="0.8"/>
+      <line x1="640" y1="176" x2="640" y2="120" stroke="rgba(45,49,66,0.20)" stroke-width="0.8"/>
+      <line x1="880" y1="174" x2="880" y2="100" stroke="rgba(235,108,54,0.50)" stroke-width="1"/>
+
+      <!-- Stage 1: CLI -->
+      <circle cx="160" cy="180" r="4" fill="#4f5d75"/>
+      <text x="160" y="112" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">CLI</text>
+      <text x="160" y="96"  fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">STAGE · 01</text>
+      <text x="160" y="208" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">branch cli</text>
+      <text x="160" y="224" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">argparse · data.json</text>
+
+      <!-- Stage 2: Frontend -->
+      <circle cx="400" cy="180" r="4" fill="#4f5d75"/>
+      <text x="400" y="112" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Frontend</text>
+      <text x="400" y="96"  fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">STAGE · 02</text>
+      <text x="400" y="208" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">branch frontend</text>
+      <text x="400" y="224" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">react · vite · no backend</text>
+
+      <!-- Stage 3: Salesforce -->
+      <circle cx="640" cy="180" r="4" fill="#4f5d75"/>
+      <text x="640" y="112" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Salesforce</text>
+      <text x="640" y="96"  fill="#4f5d75" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">STAGE · 03</text>
+      <text x="640" y="208" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">branch saleforce</text>
+      <text x="640" y="224" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">fastapi · soql · bearer</text>
+
+      <!-- Stage 4: MySQL (focal coral) -->
+      <circle cx="880" cy="180" r="6" fill="#eb6c36"/>
+      <text x="880" y="88"  fill="#eb6c36" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">CURRENT</text>
+      <text x="880" y="108" fill="#2d3142" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">MySQL</text>
+      <text x="880" y="208" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">branch main</text>
+      <text x="880" y="224" fill="#4f5d75" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">sqlalchemy · pymysql</text>
+
+      <!-- Axis label -->
+      <text x="60"  y="268" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">EARLIEST</text>
+      <text x="940" y="268" fill="#7a8399" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.18em">NOW</text>
+      <line x1="60" y1="272" x2="940" y2="272" stroke="rgba(45,49,66,0.10)" stroke-width="0.8"/>
+    </svg>
+  </div>
+</body>
+</html>
