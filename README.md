@@ -11,7 +11,7 @@ Both share `store/db.py`, which reads and writes a single `data.json` on local d
 
 ## Architecture
 
-[`docs/diagrams/architecture.html`](docs/diagrams/architecture.html)
+![CLI architecture — argparse + JSON](docs/diagrams/architecture.png)
 
 Terminal → Python CLI → JSON store → `data.json` on disk. That's the whole stack at this stage.
 
