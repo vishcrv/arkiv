@@ -4,6 +4,10 @@ A personal book collection manager. Track what you own, what you're reading, wha
 
 Built with FastAPI on the backend and React on the frontend, with MySQL as the database. The UI goes for a quiet, library-inspired feel warm linen in light mode, deep walnut in dark.
 
+![Arkiv home — currently reading, overdue alerts, and the library shelf](docs/demo/home.png)
+
+> *Above: the home page with three books on the nightstand, an overdue lend, and the start of a 21-book shelf. Full walkthrough of every screen [further down](#screenshots).*
+
 ---
 
 ## Architecture
@@ -154,3 +158,29 @@ Arkiv went through four stages before landing here:
 ![Route tree](docs/diagrams/routes.png)
 
 Five pages: `/` (Home), `/discover`, `/book/:id`, `/author/:id`, `/profile`. Components use Base UI + Tailwind v4. The design system pairs warm linen with deep walnut, using Lora for headings and Nunito Sans for body text.
+
+---
+
+## Screenshots
+
+A walk through the five routes, seeded with a demo collection of 21 books across 15 authors.
+
+**Home** — currently reading, overdue alerts, and the library grid with status filters.
+
+![Home](docs/demo/home.png)
+
+**Book detail** — status, format, rating, thoughts, and cover URL editor.
+
+![Book detail](docs/demo/book.png)
+
+**Author detail** — books in your collection by this author, with their ratings.
+
+![Author detail](docs/demo/author.png)
+
+**Discover** — add a book to the library or wishlist, with author picker and inline author creation.
+
+![Discover](docs/demo/discover.png)
+
+**Profile** — stats grid (books owned, read, currently reading, pages, authors, reviews, lent, wishlist) and a chronological activity feed.
+
+![Profile](docs/demo/profile.png)
