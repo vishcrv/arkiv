@@ -1,186 +1,445 @@
-# Arkiv
+# 🗂️ Arkiv — Production Deployment Journey
 
-A personal book collection manager. Track what you own, what you're reading, what you've lent out, and what you want next.
-
-Built with FastAPI on the backend and React on the frontend, with MySQL as the database. The UI goes for a quiet, library-inspired feel warm linen in light mode, deep walnut in dark.
-
-![Arkiv home — currently reading, overdue alerts, and the library shelf](docs/demo/home.png)
-
-> *Above: the home page with three books on the nightstand, an overdue lend, and the start of a 21-book shelf. Full walkthrough of every screen [further down](#screenshots).*
+> Production deployment + infra setup walkthrough for the Arkiv app.
+> This repo/branch documents the entire deployment process, debugging journey, architecture decisions, mistakes, fixes, and final production setup.
 
 ---
 
-## Architecture
+## Overview
 
-![Architecture — React + FastAPI + MySQL](docs/diagrams/architecture.png)
+Arkiv is now fully production deployed on **Google Cloud Platform**.
 
-The React SPA runs on `:5173` and talks to the FastAPI server on `:5000`. The API handles all the data through SQLAlchemy Core in `store/mysql.py` no ORM, just plain functions that return plain dicts.
+### Current Stack
+
+```
+Users
+   ↓
+Firebase Hosting  (React/Vite frontend)
+   ↓
+Cloud Run         (FastAPI backend)
+   ↓
+Cloud SQL         (MySQL)
+```
+
+### Additional Infrastructure & Services
+
+| Service | Role |
+|---|---|
+| Docker | Containerization |
+| Artifact Registry | Image storage |
+| Secret Manager | Secure env injection |
+| IAM Service Accounts | Permission management |
+| Google OAuth | Authentication |
+| Firebase Hosting | Frontend delivery |
 
 ---
 
-## Getting Started
+## 🌐 Final Production URLs
 
-### Prerequisites
+| Layer | URL |
+|---|---|
+| **Frontend** | https://arkiv-app.web.app |
+| **Backend** | https://arkiv-api-422579343870.asia-south1.run.app |
 
-- Python 3.11+
-- Node 20+
-- MySQL 8.0+ running locally
-- Git
+---
 
-### 1. Clone the repo
+## ✅ What This Deployment Achieved
+
+### Frontend
+- React/Vite frontend deployed to Firebase Hosting
+- Production environment configuration added
+- SPA routing configured properly
+- Connected frontend to production backend
+
+### Backend
+- FastAPI backend containerized using Docker
+- Backend deployed to Cloud Run
+- Production secrets injected securely
+- Connected to Cloud SQL using secure sockets
+
+### Database
+- MySQL migrated to Cloud SQL
+- Dedicated DB + DB user created
+- Cloud SQL secure connection configured
+
+### Infrastructure
+- Docker deployment pipeline setup
+- Artifact Registry setup
+- Secret Manager integration
+- IAM service account permissions configured
+- Google OAuth production flow configured
+
+---
+
+## 💀 Biggest Problems Faced
+
+### 1. Cloud Run Container Startup Failures
+
+**Problem:**
+```
+container failed to start
+```
+
+**What happened:**
+- Deployment itself succeeded
+- But the container crashed during startup
+- Cloud Run UI only showed generic errors
+
+**Fix:** Used Cloud Run logs to inspect the actual traceback
 
 ```bash
-git clone <your-fork-url> arkiv
-cd arkiv
+gcloud run services logs read arkiv-api --region=asia-south1 --limit=50
 ```
 
-### 2. Set up MySQL
+> 💡 **What I learned:** Cloud Run logs are mandatory for debugging. Generic deployment errors usually hide the real issue.
 
-Connect as root and run:
+---
 
-```sql
-CREATE DATABASE arkiv CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'arkiv'@'localhost' IDENTIFIED BY 'your-password-here';
-GRANT ALL PRIVILEGES ON arkiv.* TO 'arkiv'@'localhost';
-FLUSH PRIVILEGES;
+### 2. ALLOWED_ORIGINS JSON Formatting Issue
+
+**Problem:**
+```
+JSONDecodeError
 ```
 
-Then apply the schema:
+**Cause:** Environment variable JSON formatting broke. PowerShell escaping corrupted the value.
+
+**Original code:**
+```python
+_origins = json.loads(_raw_origins)
+```
+
+**Temporary fix:**
+```python
+_origins = ["http://localhost:5173"]
+```
+
+**Final production version:**
+```python
+_origins = [
+    "http://localhost:5173",
+    "https://arkiv-app.web.app",
+    "https://arkiv-app.firebaseapp.com",
+]
+```
+
+> 💡 **What I learned:** Infra bugs are often config formatting issues. PowerShell escaping can silently break configs. Simpler configs reduce deployment friction.
+
+---
+
+### 3. Docker Build Context Issue
+
+**Problem:**
+```
+266MB build context
+```
+
+**Cause:** These were getting copied into Docker build context:
+- `.venv`
+- `frontend/node_modules`
+- unnecessary local files
+
+**Fix:** Created `.dockerignore`
+
+```
+.venv
+.git
+__pycache__
+.vscode
+frontend/node_modules
+frontend/dist
+*.pyc
+.env
+.env.*
+```
+
+**Result:** `266MB → 4KB` build context
+
+> 💡 **What I learned:** Docker copies the current folder into build context. `.dockerignore` is extremely important. Local environments should never be copied into containers.
+
+---
+
+### 4. Firebase Project Linking Issue
+
+**Problem:**
+```
+No Firebase projects associated
+```
+
+**Cause:** GCP project was created outside Firebase.
+
+**Fix:** Linked Firebase manually through Firebase Console.
+
+> 💡 **What I learned:** Firebase can attach onto existing GCP projects. The Firebase layer is separate from base GCP project creation.
+
+---
+
+### 5. OAuth Audience Mismatch Issue
+
+> ⚠️ This was the most annoying bug during deployment.
+
+**Problem:**
+```
+Invalid Google token
+```
+
+**Backend logs showed:**
+```
+Token has wrong audience
+```
+
+**After debugging:**
+
+| | Value |
+|---|---|
+| Expected | `clientid.apps.googleusercontent.com\r\n` |
+| Actual | `clientid.apps.googleusercontent.com` |
+
+**Cause:** Hidden newline characters inside Secret Manager value. PowerShell injected hidden CRLF characters.
+
+**Final fix:**
+
+```python
+# Before
+_GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+
+# After
+_GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
+```
+
+> 💡 **What I learned:** Hidden whitespace can completely break auth. `.strip()` hardens env variable handling. Infra debugging sometimes involves invisible characters.
+
+---
+
+## 🚀 Full Deployment Walkthrough
+
+### 1. GCP Project Setup
+
+Created project: `arkiv-app`
+
+> **Learned:**
+> - Project IDs are permanent
+> - Billing is attached to project
+> - Firebase, Cloud Run, Cloud SQL all operate under the same project
+
+---
+
+### 2. Installed Required Tooling
+
+Installed:
+- `gcloud`
+- `firebase-tools`
+- `docker desktop`
+
+Verification:
+```bash
+gcloud version
+firebase --version
+docker --version
+```
+
+---
+
+### 3. Enabled Required APIs
 
 ```bash
-mysql -u arkiv -p arkiv < store/schema.sql
+gcloud services enable \
+  run.googleapis.com \
+  sqladmin.googleapis.com \
+  secretmanager.googleapis.com \
+  artifactregistry.googleapis.com \
+  firebase.googleapis.com \
+  iam.googleapis.com
 ```
 
-**Optional:** seed with sample data from the migration. Open `migration/load.sql` first and replace the hardcoded `C:/Users/PC/dev/projs/arkiv/...` paths with your own. Then enable `LOCAL INFILE` and run:
+> **Learned:** GCP services are modular APIs. Services must be enabled before usage.
 
-```sql
-SET GLOBAL local_infile = 1;
+---
+
+### 4. Cloud SQL Setup
+
+**Initial mistake:**
+```bash
+--storage-size=1GB
+# Error: minimum is 10GB
 ```
+
+**Created instance:**
+```bash
+gcloud sql instances create arkiv-db \
+  --database-version=MYSQL_8_0 \
+  --tier=db-f1-micro \
+  --region=asia-south1 \
+  --storage-type=SSD \
+  --storage-size=10GB \
+  --backup-start-time=03:00
+```
+
+**Created DB:**
+```bash
+gcloud sql databases create arkiv --instance=arkiv-db
+```
+
+**Created DB user:**
+```bash
+gcloud sql users create arkiv --instance=arkiv-db --password=YOUR_PASSWORD
+```
+
+---
+
+### 5. Secret Manager Setup
+
+Created secrets for:
+- JWT secret
+- MySQL URL
+- Google Client ID
+
+> **Learned:** Never hardcode secrets into code. Cloud Run can inject secrets directly as env vars.
+
+---
+
+### 6. Docker Setup
+
+**Build image:**
+```bash
+docker build -t asia-south1-docker.pkg.dev/arkiv-app/arkiv/api:latest .
+```
+
+**Push image:**
+```bash
+docker push asia-south1-docker.pkg.dev/arkiv-app/arkiv/api:latest
+```
+
+> **Learned:** Docker image = packaged runtime environment. Artifact Registry stores deployable containers.
+
+---
+
+### 7. IAM Service Account Setup
+
+**Created service account:**
+```bash
+gcloud iam service-accounts create arkiv-api-sa \
+  --display-name="Arkiv API Service Account"
+```
+
+Added permissions:
+- Secret Manager access
+- Cloud SQL client access
+
+> **Learned:** Cloud Run executes as a service account. Backend needs explicit permissions to access infra.
+
+---
+
+### 8. Cloud Run Deployment
 
 ```bash
-mysql --local-infile=1 -u arkiv -p arkiv < migration/load.sql
+gcloud run deploy arkiv-api \
+  --image=asia-south1-docker.pkg.dev/arkiv-app/arkiv/api:latest \
+  --region=asia-south1 \
+  --platform=managed \
+  --allow-unauthenticated \
+  --service-account=arkiv-api-sa@arkiv-app.iam.gserviceaccount.com \
+  --add-cloudsql-instances=arkiv-app:asia-south1:arkiv-db \
+  --set-secrets="MYSQL_URL=arkiv-mysql-url:latest,JWT_SECRET=arkiv-jwt-secret:latest,GOOGLE_CLIENT_ID=arkiv-google-client-id:latest" \
+  --port=8080 \
+  --min-instances=0 \
+  --max-instances=2
 ```
 
-If you skip this the app just starts empty and you add books through the UI.
-
-### 3. Configure the backend
-
-Create a `.env` file in the root (already git-ignored):
-
-```dotenv
-MYSQL_URL=mysql+pymysql://arkiv:your-password-here@localhost:3306/arkiv
+**Verified successful deployment using:**
+```json
+{"detail":"Not authenticated"}
 ```
 
-### 4. Run the API
+> **Learned:** `401` can mean a healthy protected backend. Backend + auth middleware + DB connection were all working.
 
+---
+
+### 9. Firebase Hosting Setup
+
+**Initialized Firebase Hosting:**
 ```bash
-python -m venv .venv
-source .venv/bin/activate       # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn api:app --reload --port 5000
+firebase init hosting
 ```
 
-Check it's working at `http://localhost:5000/docs` or hit `/api/books` directly. If you see `db_unavailable`, MySQL isn't reachable or the URL in `.env` is wrong.
+Selected:
+- existing project
+- `arkiv-app`
+- `frontend/dist`
+- SPA rewrite enabled
 
-### 5. Run the frontend
+**Production env:**
+```env
+VITE_API_URL=https://arkiv-api-422579343870.asia-south1.run.app
+VITE_GOOGLE_CLIENT_ID=YOUR_CLIENT_ID
+```
 
+**Deploy:**
 ```bash
 cd frontend
-npm install
-npm run dev
-```
+npm run build
 
-Open `http://localhost:5173`. The Vite dev server proxies `/api/*` to `:5000` automatically so there's no frontend env file needed.
-
----
-
-## A Few Things Worth Knowing
-
-**Ports are hardcoded in two places.** The CORS allowlist in `api.py` expects the frontend on `:5173`, and `vite.config.js` expects the API on `:5000`. If you change one, change both.
-
-**`store/schema.sql` is the source of truth.** Don't modify tables through a GUI: edit the file and re-apply it so anyone cloning gets the same schema.
-
-**Author IDs follow the `author_<uuid8>` format** and are generated by the API. Don't insert authors manually with arbitrary IDs or the foreign key on `books` will reject them.
-
-**`migration/`** is a one-time artifact from moving off Salesforce. Once you've seeded, you can ignore it or delete it.
-
----
-
-## Project Layout
-
-```
-api.py              FastAPI app, all /api/* routes
-store/
-  mysql.py          SQLAlchemy Core data layer
-  schema.sql        MySQL schema, source of truth
-frontend/           Vite + React 19 + Tailwind v4
-  src/lib/api.js    fetch wrapper for the API
-docs/diagrams/      architecture, ER, sequence, route diagrams
-migration/          one-time Salesforce to MySQL migration artifacts
-scripts/            prep_csvs.py, test_mysql_layer.py
+cd ..
+firebase deploy --only hosting
 ```
 
 ---
 
-## Data Model
+### 10. OAuth Setup
 
-![ER diagram](docs/diagrams/er.png)
+Created OAuth client as: **Web application**
 
-Five tables: `authors`, `books`, `wishlist`, `activity`, `profile`. Books are keyed by ISBN and hold lending info inline. Status is one of `available`, `lent`, `reading`, or `sold`. Authors use an 8-char UUID ID and are referenced by `books.author_id`.
+**Authorized origins:**
+```
+http://localhost:5173
+https://arkiv-app.web.app
+https://arkiv-app.firebaseapp.com
+```
 
----
-
-## How a Request Flows
-
-![Sequence diagram](docs/diagrams/api-flow.png)
-
-A walkthrough of `GET /books?sort=title` end to end: click in the browser, `fetch()` in React, route handler in FastAPI, SQLAlchemy Core query, MySQL, JSON back to the page.
-
----
-
-## How the Project Evolved
-
-![Timeline](docs/diagrams/evolution.png)
-
-Arkiv went through four stages before landing here:
-
-| Stage | Branch | Stack |
-|-------|--------|-------|
-| 01 · CLI | `cli` | argparse + data.json |
-| 02 · Frontend | `frontend` | React + Vite, no backend |
-| 03 · Salesforce | `salesforce` | FastAPI + Salesforce (SOQL) |
-| 04 · MySQL | `main` | FastAPI + SQLAlchemy + MySQL |
+> **Learned:** Google OAuth origins are extremely strict. Missing origins silently break authentication. No trailing slash allowed.
 
 ---
 
-## Frontend Routes
+## 🧠 Final Infra Concepts Learned
 
-![Route tree](docs/diagrams/routes.png)
+### Cloud Run
+- Runs containers, not raw Python code
+- Pulls Docker images from Artifact Registry
+- Uses service accounts for permissions
 
-Five pages: `/` (Home), `/discover`, `/book/:id`, `/author/:id`, `/profile`. Components use Base UI + Tailwind v4. The design system pairs warm linen with deep walnut, using Lora for headings and Nunito Sans for body text.
+### Docker
+- Packages application runtime
+- Build context size matters heavily
+- `.dockerignore` is critical
+
+### Cloud SQL
+- Secure managed MySQL
+- Uses proxy/socket connection
+- Separate instance, database, and user concepts
+
+### Secret Manager
+- Secure env variable injection
+- Better than storing secrets in code or `.env`
+
+### Firebase Hosting
+- Serves frontend static files
+- Handles SPA routing
+- Can connect to existing GCP projects
 
 ---
 
-## Screenshots
+## 🏁 Final State
 
-A walk through the five routes, seeded with a demo collection of 21 books across 15 authors.
+Fully working production stack:
 
-**Home** — currently reading, overdue alerts, and the library grid with status filters.
+- ✅ Cloud Run backend
+- ✅ Firebase Hosting frontend
+- ✅ Cloud SQL database
+- ✅ Google OAuth
+- ✅ JWT auth
+- ✅ Secret Manager
+- ✅ Docker deployment pipeline
+- ✅ Artifact Registry
+- ✅ IAM service accounts
 
-![Home](docs/demo/home.png)
-
-**Book detail** — status, format, rating, thoughts, and cover URL editor.
-
-![Book detail](docs/demo/book.png)
-
-**Author detail** — books in your collection by this author, with their ratings.
-
-![Author detail](docs/demo/author.png)
-
-**Discover** — add a book to the library or wishlist, with author picker and inline author creation.
-
-![Discover](docs/demo/discover.png)
-
-**Profile** — stats grid (books owned, read, currently reading, pages, authors, reviews, lent, wishlist) and a chronological activity feed.
-
-![Profile](docs/demo/profile.png)
+**Everything deployed and working end-to-end.**
