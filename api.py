@@ -4,8 +4,10 @@ Run: uvicorn api:app --reload --port 5000
 """
 
 import os
+import json
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
+
 
 import bcrypt
 import jwt
@@ -22,17 +24,24 @@ import store.mysql as store
 
 app = FastAPI(title="Arkiv API", version="2.0.0")
 
+_origins = [
+    "http://localhost:5173",
+    "https://arkiv-app.web.app",
+    "https://arkiv-app.firebaseapp.com",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
 _JWT_SECRET = os.environ.get("JWT_SECRET", "change-me-in-production")
 _JWT_ALGO = "HS256"
 _JWT_EXPIRE_HOURS = 72
-_GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+_GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
 _bearer = HTTPBearer()
 _VALID_STATUSES = {"available", "lent", "reading", "read", "sold"}
 
@@ -182,8 +191,8 @@ def google_auth(body: GoogleAuthIn):
         info = google_id_token.verify_oauth2_token(
             body.id_token, google_requests.Request(), _GOOGLE_CLIENT_ID
         )
-    except Exception:
-        raise HTTPException(401, "Invalid Google token")
+    except Exception as e:
+        raise HTTPException(401, f"Invalid Google token: {type(e).__name__}: {e}")
 
     google_id = info["sub"]
     email = info.get("email", "")

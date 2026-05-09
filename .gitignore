@@ -1,9 +1,49 @@
-__pycache__
-.venv/
+# Python
+__pycache__/
+*.py[cod]
 
-# frontend
+# Virtual env
+.venv/
+venv/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Frontend
 node_modules/
 dist/
-.env*.local
+build/
 
-.env
+# Firebase
+.firebase/
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Python tooling
+.pytest_cache/
+.mypy_cache/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Google Cloud / service accounts
+service-account*.json
+gcp-key*.json
+
+# Keep infra configs tracked
+!firebase.json
+!Dockerfile
+!dockerignore
+!requirements.txt

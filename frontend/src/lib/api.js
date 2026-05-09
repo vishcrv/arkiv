@@ -11,12 +11,14 @@ function getToken() {
   return localStorage.getItem("arkiv_token");
 }
 
+const API_BASE = (import.meta.env.VITE_API_URL || "").replace(/\/$/, "");
+
 async function request(path, opts = {}) {
   const token = getToken();
   const headers = { "Content-Type": "application/json", ...(opts.headers || {}) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(path, { ...opts, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
   if (res.status === 204) return null;
 
   let body = null;
