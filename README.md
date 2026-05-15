@@ -1,120 +1,82 @@
-# 🗂️ Arkiv — Production Deployment Journey
+# Arkiv — Production Deployment
 
-> Production deployment + infra setup walkthrough for the Arkiv app.
-> This repo/branch documents the entire deployment process, debugging journey, architecture decisions, mistakes, fixes, and final production setup.
+This branch is the deployment log. Today I moved the entire Arkiv app from local dev into a proper cloud production setup on Google Cloud Platform — frontend, backend, database, auth, secrets, the whole thing.
+
+The `main` branch has the app itself. This README documents how it got from "runs on my laptop" to "running in production end-to-end."
 
 ---
 
-## Overview
+## What I Did
 
-Arkiv is now fully production deployed on **Google Cloud Platform**.
+- **Frontend** (React/Vite) → deployed to **Firebase Hosting**
+- **Backend** (FastAPI) → containerized with Docker, deployed to **Cloud Run**
+- **Database** (MySQL) → migrated from local MySQL to **Cloud SQL**
+- **Docker + Artifact Registry** deployment pipeline set up
+- **Secret Manager + IAM service accounts** configured for secure env injection
+- **Google OAuth** auth flow integrated end-to-end
 
-### Current Stack
+By the end of it the full production stack was live with Google sign-in working.
+
+---
+
+## Final Architecture
 
 ```
 Users
-   ↓
-Firebase Hosting  (React/Vite frontend)
-   ↓
-Cloud Run         (FastAPI backend)
-   ↓
-Cloud SQL         (MySQL)
+  ↓
+Firebase Hosting   →  React/Vite frontend
+  ↓
+Cloud Run          →  FastAPI backend
+  ↓
+Cloud SQL          →  MySQL database
+
+Secret Manager     →  env secrets injected into Cloud Run
+Artifact Registry  →  Docker images
+IAM / Service Acc  →  Cloud Run identity + permissions
 ```
 
-### Additional Infrastructure & Services
-
-| Service | Role |
-|---|---|
-| Docker | Containerization |
-| Artifact Registry | Image storage |
-| Secret Manager | Secure env injection |
-| IAM Service Accounts | Permission management |
-| Google OAuth | Authentication |
-| Firebase Hosting | Frontend delivery |
+Frontend lives at `arkiv-app.web.app`. Backend runs on Cloud Run in `asia-south1`. The two are wired via `VITE_API_URL` at build time and CORS allowlisting on the API side.
 
 ---
 
-## 🌐 Final Production URLs
+## The Big Lesson
 
-| Layer | URL |
-|---|---|
-| **Frontend** | https://arkiv-app.web.app |
-| **Backend** | https://arkiv-api-422579343870.asia-south1.run.app |
+The single biggest thing I took away from this is **how cloud services actually connect together in production**. Cloud Run doesn't just "talk" to the database the way `localhost:3306` does. You have to:
 
----
+- enable the right APIs
+- create a service account
+- give that service account the right IAM roles (Secret Manager accessor, Cloud SQL client)
+- attach the Cloud SQL instance to the Cloud Run service so it connects through a socket, not over the public internet
+- inject secrets from Secret Manager as env vars at runtime, not bake them into the image
 
-## ✅ What This Deployment Achieved
-
-### Frontend
-- React/Vite frontend deployed to Firebase Hosting
-- Production environment configuration added
-- SPA routing configured properly
-- Connected frontend to production backend
-
-### Backend
-- FastAPI backend containerized using Docker
-- Backend deployed to Cloud Run
-- Production secrets injected securely
-- Connected to Cloud SQL using secure sockets
-
-### Database
-- MySQL migrated to Cloud SQL
-- Dedicated DB + DB user created
-- Cloud SQL secure connection configured
-
-### Infrastructure
-- Docker deployment pipeline setup
-- Artifact Registry setup
-- Secret Manager integration
-- IAM service account permissions configured
-- Google OAuth production flow configured
+None of that is one command. It's a chain of permissions and bindings, and any missing link silently breaks the service.
 
 ---
 
-## 💀 Biggest Problems Faced
+## Problems I Hit (and Fixed)
 
-### 1. Cloud Run Container Startup Failures
+### 1. Cloud Run container failing to start
 
-**Problem:**
-```
-container failed to start
-```
+Deployment would say "deployed successfully" but the container crashed during startup. The Cloud Run UI just shows generic errors.
 
-**What happened:**
-- Deployment itself succeeded
-- But the container crashed during startup
-- Cloud Run UI only showed generic errors
-
-**Fix:** Used Cloud Run logs to inspect the actual traceback
+Fix: read the actual logs.
 
 ```bash
 gcloud run services logs read arkiv-api --region=asia-south1 --limit=50
 ```
 
-> 💡 **What I learned:** Cloud Run logs are mandatory for debugging. Generic deployment errors usually hide the real issue.
+Lesson: Cloud Run logs are mandatory. The dashboard hides the real traceback.
 
----
+### 2. Malformed env JSON for CORS origins
 
-### 2. ALLOWED_ORIGINS JSON Formatting Issue
+I was originally loading CORS origins from an env var as JSON:
 
-**Problem:**
-```
-JSONDecodeError
-```
-
-**Cause:** Environment variable JSON formatting broke. PowerShell escaping corrupted the value.
-
-**Original code:**
 ```python
 _origins = json.loads(_raw_origins)
 ```
 
-**Temporary fix:**
-```python
-_origins = ["http://localhost:5173"]
-```
+PowerShell's escaping mangled the value on the way in and I got `JSONDecodeError` on startup. I dropped the JSON-env approach entirely and hardcoded the allowlist:
 
-**Final production version:**
 ```python
 _origins = [
     "http://localhost:5173",
@@ -123,23 +85,13 @@ _origins = [
 ]
 ```
 
-> 💡 **What I learned:** Infra bugs are often config formatting issues. PowerShell escaping can silently break configs. Simpler configs reduce deployment friction.
+Lesson: simpler configs deploy more reliably. Don't push JSON through env vars if you don't have to.
 
----
+### 3. Docker build context blowing up to 266 MB
 
-### 3. Docker Build Context Issue
+First `docker build` was copying `.venv`, `frontend/node_modules`, `.git`, and other local junk into the build context. Took forever and the resulting image was huge.
 
-**Problem:**
-```
-266MB build context
-```
-
-**Cause:** These were getting copied into Docker build context:
-- `.venv`
-- `frontend/node_modules`
-- unnecessary local files
-
-**Fix:** Created `.dockerignore`
+Fix: a real `.dockerignore`.
 
 ```
 .venv
@@ -153,51 +105,29 @@ frontend/dist
 .env.*
 ```
 
-**Result:** `266MB → 4KB` build context
+Build context dropped from **266 MB → 4 KB**.
 
-> 💡 **What I learned:** Docker copies the current folder into build context. `.dockerignore` is extremely important. Local environments should never be copied into containers.
+Lesson: `.dockerignore` is not optional. Docker copies the entire current folder into the build context unless you tell it not to.
 
----
+### 4. Firebase wouldn't recognize the project
 
-### 4. Firebase Project Linking Issue
+I created the GCP project first, then tried `firebase init` — got "No Firebase projects associated."
 
-**Problem:**
+Fix: open the Firebase Console and manually attach Firebase to the existing GCP project. Firebase is a layer on top of GCP, not the same thing.
+
+Lesson: Firebase and GCP are linked but separately initialized. You can't assume `gcloud projects create` also creates a Firebase project.
+
+### 5. OAuth audience mismatch (the worst one)
+
+This one took the longest. The Google sign-in popup worked fine on the frontend, but the backend kept rejecting every token with:
+
 ```
-No Firebase projects associated
-```
-
-**Cause:** GCP project was created outside Firebase.
-
-**Fix:** Linked Firebase manually through Firebase Console.
-
-> 💡 **What I learned:** Firebase can attach onto existing GCP projects. The Firebase layer is separate from base GCP project creation.
-
----
-
-### 5. OAuth Audience Mismatch Issue
-
-> ⚠️ This was the most annoying bug during deployment.
-
-**Problem:**
-```
-Invalid Google token
+Invalid Google token: Token has wrong audience
 ```
 
-**Backend logs showed:**
-```
-Token has wrong audience
-```
+The expected and actual values *looked* identical when printed. After a lot of staring, I diff'd them as bytes and found the expected audience had a trailing `\r\n` — a hidden CRLF that PowerShell had injected when I pushed the value into Secret Manager.
 
-**After debugging:**
-
-| | Value |
-|---|---|
-| Expected | `clientid.apps.googleusercontent.com\r\n` |
-| Actual | `clientid.apps.googleusercontent.com` |
-
-**Cause:** Hidden newline characters inside Secret Manager value. PowerShell injected hidden CRLF characters.
-
-**Final fix:**
+Fix in `api.py`:
 
 ```python
 # Before
@@ -207,40 +137,27 @@ _GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 _GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip()
 ```
 
-> 💡 **What I learned:** Hidden whitespace can completely break auth. `.strip()` hardens env variable handling. Infra debugging sometimes involves invisible characters.
+Lesson: invisible whitespace in secrets is a real thing, especially on Windows. `.strip()` your auth-critical env vars on the way in.
 
 ---
 
-## 🚀 Full Deployment Walkthrough
+## Deployment Walkthrough
 
-### 1. GCP Project Setup
+The rough order I went through, with the gotchas.
 
-Created project: `arkiv-app`
+### 1. GCP project
 
-> **Learned:**
-> - Project IDs are permanent
-> - Billing is attached to project
-> - Firebase, Cloud Run, Cloud SQL all operate under the same project
+Created project `arkiv-app`. Project IDs are permanent. Billing attaches to the project. Cloud Run, Cloud SQL, Firebase, Secret Manager all live under it.
 
----
+### 2. Tooling
 
-### 2. Installed Required Tooling
-
-Installed:
-- `gcloud`
-- `firebase-tools`
-- `docker desktop`
-
-Verification:
 ```bash
 gcloud version
 firebase --version
 docker --version
 ```
 
----
-
-### 3. Enabled Required APIs
+### 3. Enable APIs
 
 ```bash
 gcloud services enable \
@@ -252,19 +169,12 @@ gcloud services enable \
   iam.googleapis.com
 ```
 
-> **Learned:** GCP services are modular APIs. Services must be enabled before usage.
+Every service is a separate API that has to be turned on.
 
----
+### 4. Cloud SQL
 
-### 4. Cloud SQL Setup
+First attempt failed because I asked for `--storage-size=1GB`. Minimum is 10 GB.
 
-**Initial mistake:**
-```bash
---storage-size=1GB
-# Error: minimum is 10GB
-```
-
-**Created instance:**
 ```bash
 gcloud sql instances create arkiv-db \
   --database-version=MYSQL_8_0 \
@@ -273,64 +183,41 @@ gcloud sql instances create arkiv-db \
   --storage-type=SSD \
   --storage-size=10GB \
   --backup-start-time=03:00
-```
 
-**Created DB:**
-```bash
 gcloud sql databases create arkiv --instance=arkiv-db
-```
-
-**Created DB user:**
-```bash
 gcloud sql users create arkiv --instance=arkiv-db --password=YOUR_PASSWORD
 ```
 
----
+Then loaded `store/schema.sql` and the migration data through the Cloud SQL proxy.
 
-### 5. Secret Manager Setup
+### 5. Secret Manager
 
-Created secrets for:
-- JWT secret
-- MySQL URL
-- Google Client ID
+Created three secrets:
+- `arkiv-mysql-url` — the SQLAlchemy connection string (using the Cloud SQL socket path)
+- `arkiv-jwt-secret` — JWT signing secret
+- `arkiv-google-client-id` — OAuth client ID for token verification
 
-> **Learned:** Never hardcode secrets into code. Cloud Run can inject secrets directly as env vars.
+Secrets get injected into Cloud Run at runtime. Never committed, never in the image.
 
----
+### 6. Docker
 
-### 6. Docker Setup
-
-**Build image:**
 ```bash
 docker build -t asia-south1-docker.pkg.dev/arkiv-app/arkiv/api:latest .
-```
-
-**Push image:**
-```bash
 docker push asia-south1-docker.pkg.dev/arkiv-app/arkiv/api:latest
 ```
 
-> **Learned:** Docker image = packaged runtime environment. Artifact Registry stores deployable containers.
+Artifact Registry is just the image host. Cloud Run pulls from it.
 
----
+### 7. Service account
 
-### 7. IAM Service Account Setup
-
-**Created service account:**
 ```bash
 gcloud iam service-accounts create arkiv-api-sa \
   --display-name="Arkiv API Service Account"
 ```
 
-Added permissions:
-- Secret Manager access
-- Cloud SQL client access
+Granted it: Secret Manager accessor, Cloud SQL client. Cloud Run runs *as* this account, so anything the backend needs to reach has to be granted to it explicitly.
 
-> **Learned:** Cloud Run executes as a service account. Backend needs explicit permissions to access infra.
-
----
-
-### 8. Cloud Run Deployment
+### 8. Cloud Run
 
 ```bash
 gcloud run deploy arkiv-api \
@@ -346,100 +233,57 @@ gcloud run deploy arkiv-api \
   --max-instances=2
 ```
 
-**Verified successful deployment using:**
-```json
-{"detail":"Not authenticated"}
-```
+First successful hit returned `{"detail":"Not authenticated"}` — which is exactly right. The backend was up, auth middleware was guarding routes, the DB was connected. A 401 here meant everything worked.
 
-> **Learned:** `401` can mean a healthy protected backend. Backend + auth middleware + DB connection were all working.
+### 9. Firebase Hosting
 
----
-
-### 9. Firebase Hosting Setup
-
-**Initialized Firebase Hosting:**
 ```bash
 firebase init hosting
+# existing project: arkiv-app
+# public dir: frontend/dist
+# SPA rewrite: yes
 ```
 
-Selected:
-- existing project
-- `arkiv-app`
-- `frontend/dist`
-- SPA rewrite enabled
+Production env in `frontend/.env.production`:
 
-**Production env:**
-```env
-VITE_API_URL=https://arkiv-api-422579343870.asia-south1.run.app
+```
+VITE_API_URL=https://arkiv-api-<region-host>.run.app
 VITE_GOOGLE_CLIENT_ID=YOUR_CLIENT_ID
 ```
 
-**Deploy:**
 ```bash
 cd frontend
 npm run build
-
 cd ..
 firebase deploy --only hosting
 ```
 
----
+I also separated `.env.local` and `.env.production` so dev hits localhost and prod hits Cloud Run automatically based on which build is running.
 
-### 10. OAuth Setup
+### 10. Google OAuth
 
-Created OAuth client as: **Web application**
+Created an OAuth client (Web application) with three authorized origins:
 
-**Authorized origins:**
 ```
 http://localhost:5173
 https://arkiv-app.web.app
 https://arkiv-app.firebaseapp.com
 ```
 
-> **Learned:** Google OAuth origins are extremely strict. Missing origins silently break authentication. No trailing slash allowed.
+OAuth origins are strict. No trailing slashes. Any missing origin → silent auth failure in the browser console.
 
 ---
 
-## 🧠 Final Infra Concepts Learned
+## Final State
 
-### Cloud Run
-- Runs containers, not raw Python code
-- Pulls Docker images from Artifact Registry
-- Uses service accounts for permissions
+```
+Firebase Hosting   →  React frontend
+Cloud Run          →  FastAPI backend
+Cloud SQL          →  MySQL database
+Secret Manager     →  env secrets
+Artifact Registry  →  Docker images
+IAM Service Acc.   →  Cloud Run identity
+Google OAuth       →  Auth flow
+```
 
-### Docker
-- Packages application runtime
-- Build context size matters heavily
-- `.dockerignore` is critical
-
-### Cloud SQL
-- Secure managed MySQL
-- Uses proxy/socket connection
-- Separate instance, database, and user concepts
-
-### Secret Manager
-- Secure env variable injection
-- Better than storing secrets in code or `.env`
-
-### Firebase Hosting
-- Serves frontend static files
-- Handles SPA routing
-- Can connect to existing GCP projects
-
----
-
-## 🏁 Final State
-
-Fully working production stack:
-
-- ✅ Cloud Run backend
-- ✅ Firebase Hosting frontend
-- ✅ Cloud SQL database
-- ✅ Google OAuth
-- ✅ JWT auth
-- ✅ Secret Manager
-- ✅ Docker deployment pipeline
-- ✅ Artifact Registry
-- ✅ IAM service accounts
-
-**Everything deployed and working end-to-end.**
+The full app, including Google sign-in, is running in production end-to-end. From "works on my machine" → "works on the internet" in one (long) day.
