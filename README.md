@@ -2,7 +2,9 @@
 
 A personal book collection manager. Track what you own, what you're reading, what you've lent out, and what you want next.
 
-Built with FastAPI on the backend and React on the frontend, with MySQL as the database. The UI goes for a quiet, library-inspired feel warm linen in light mode, deep walnut in dark.
+Built with FastAPI on the backend and React on the frontend, with MySQL as the database. Multi-user with JWT auth and Google sign-in. The UI goes for a quiet, library-inspired feel warm linen in light mode, deep walnut in dark.
+
+**Live:** [arkiv-app.web.app](https://arkiv-app.web.app) — frontend on Firebase Hosting, API on Cloud Run, MySQL on Cloud SQL.
 
 ![Arkiv home — currently reading, overdue alerts, and the library shelf](docs/demo/home.png)
 
@@ -106,15 +108,45 @@ Open `http://localhost:5173`. The Vite dev server proxies `/api/*` to `:5000` au
 
 ---
 
+## Production Deployment
+
+Arkiv runs on Google Cloud:
+
+```
+Users → Firebase Hosting (frontend) → Cloud Run (FastAPI) → Cloud SQL (MySQL)
+```
+
+| Layer | Service |
+|---|---|
+| Frontend | Firebase Hosting (`arkiv-app.web.app`) |
+| Backend | Cloud Run (`asia-south1`), containerized via Docker, image in Artifact Registry |
+| Database | Cloud SQL for MySQL 8.0, connected via the Cloud SQL socket |
+| Auth | Google OAuth (ID token) + server-issued JWT |
+| Secrets | Secret Manager injects `MYSQL_URL`, `JWT_SECRET`, `GOOGLE_CLIENT_ID` into Cloud Run |
+| Identity | Cloud Run runs as a dedicated service account with Secret Manager and Cloud SQL Client roles |
+
+The repo carries the infra files: `Dockerfile`, `.dockerignore`, `firebase.json`, `.firebaserc`. CORS in `api.py` allows `localhost:5173`, `arkiv-app.web.app`, and `arkiv-app.firebaseapp.com`. The frontend reads `VITE_API_URL` and `VITE_GOOGLE_CLIENT_ID` at build time.
+
+A few things that bit during deployment, worth flagging if you redeploy:
+
+- **`.dockerignore` matters.** Without it, `.venv` and `node_modules` blow the build context up to hundreds of MB.
+- **Strip env vars.** `GOOGLE_CLIENT_ID` from Secret Manager picked up a hidden CRLF on Windows; the code calls `.strip()` to defend against it.
+- **OAuth origins are exact.** Missing one or a stray trailing slash silently breaks sign-in.
+
+---
+
 ## Project Layout
 
 ```
-api.py              FastAPI app, all /api/* routes
+api.py              FastAPI app, all /api/* routes (JWT + Google OAuth)
+Dockerfile          backend container image for Cloud Run
+firebase.json       Firebase Hosting + SPA rewrite config
+.firebaserc         Firebase project binding
 store/
   mysql.py          SQLAlchemy Core data layer
   schema.sql        MySQL schema, source of truth
 frontend/           Vite + React 19 + Tailwind v4
-  src/lib/api.js    fetch wrapper for the API
+  src/lib/api.js    fetch wrapper (reads VITE_API_URL, attaches JWT)
 docs/diagrams/      architecture, ER, sequence, route diagrams
 migration/          one-time Salesforce to MySQL migration artifacts
 scripts/            prep_csvs.py, test_mysql_layer.py
